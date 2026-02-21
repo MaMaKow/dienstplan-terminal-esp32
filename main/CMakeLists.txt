@@ -1,7 +1,6 @@
 idf_component_register(
     SRCS
         "main.c"
-        "epd_2in9.c"
         "font8.cpp"
         "font12.cpp"
         "font16.cpp"

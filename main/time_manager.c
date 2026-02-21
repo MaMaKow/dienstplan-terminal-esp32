@@ -2,6 +2,8 @@
 #include <time.h>
 #include "esp_sntp.h"
 #include "esp_log.h"
+#include "epaper_manager.h"
+#include "fonts.h"
 
 /* ============================= */
 /*            NTP                */
@@ -58,9 +60,17 @@ void time_task(void *pvParameters)
         char strftime_buf[64];
         strftime(strftime_buf, sizeof(strftime_buf),
                  "%d.%m.%Y %H:%M:%S", &timeinfo);
+        char date_buf[64];
+        strftime(date_buf, sizeof(date_buf),
+                 "%d.%m.%Y", &timeinfo);
+        char time_buf[64];
+        strftime(time_buf, sizeof(time_buf),
+                 "%H:%M", &timeinfo);
 
         ESP_LOGI(TAG, "Aktuelle Zeit: %s", strftime_buf);
-
+        epd_draw_string(10, 68, time_buf, &Font24, EPD_BLACK);
+        epd_draw_string(10, 90, date_buf, &Font16, EPD_BLACK);
+        epd_display();
         vTaskDelay(pdMS_TO_TICKS(60000)); // 60 Sekunden
     }
 }

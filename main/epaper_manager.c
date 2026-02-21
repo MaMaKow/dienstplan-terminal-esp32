@@ -56,6 +56,114 @@ static uint8_t framebuffer[EPD_RAM_WIDTH * EPD_RAM_HEIGHT / 8]; // 128 * 296 / 8
 #define CMD_BORDER_WAVEFORM_CONTROL 0x3C
 #define CMD_END_OPTION 0x22
 
+// Übersetzt physikalische Koordinaten (x,y) in Framebuffer-Index und Bit
+// WICHTIG: Koordinatenumrechnung für gedrehtes Display
+// Physikalische Position (x, y) → RAM Position
+// Das Display ist um 90° gedreht: phys_x → ram_y, phys_y → ram_x
+static bool epd_get_fb_position(int phys_x, int phys_y, uint32_t *fb_idx, uint32_t *fb_bit)
+{
+    // Prüfe physikalische Grenzen
+    if (phys_x < 0 || phys_x >= EPD_WIDTH || phys_y < 0 || phys_y >= EPD_HEIGHT) {
+        return false;
+    }
+
+    // 90° Drehung: phys(x,y) -> ram( (width-1)-y, x )
+    uint32_t ram_x = (EPD_RAM_WIDTH - 1) - phys_y;
+    uint32_t ram_y = phys_x;
+
+    // Prüfe RAM-Grenzen
+    if (ram_x >= EPD_RAM_WIDTH || ram_y >= EPD_RAM_HEIGHT) {
+        return false;
+    }
+
+    *fb_idx = ram_y * (EPD_RAM_WIDTH / 8) + ram_x / 8;
+    *fb_bit = 7 - (ram_x % 8);
+
+    return (*fb_idx < sizeof(framebuffer));
+}
+
+// Setzt einen Pixel auf die gewünschte Farbe
+static void epd_set_pixel(int phys_x, int phys_y, uint8_t color)
+{
+    uint32_t fb_idx, fb_bit;
+
+    if (epd_get_fb_position(phys_x, phys_y, &fb_idx, &fb_bit)) {
+        uint8_t old_value = framebuffer[fb_idx];
+        
+        if (color == EPD_BLACK) {
+            framebuffer[fb_idx] &= ~(1 << fb_bit);
+        } else { // EPD_WHITE
+            framebuffer[fb_idx] |= (1 << fb_bit);
+        }
+        
+        // Debug: Zeige wenn sich etwas ändert
+        if (old_value != framebuffer[fb_idx]) {
+            ESP_LOGD(TAG, "Pixel (%d,%d) changed: fb[%d] bit %d = %d", 
+                     phys_x, phys_y, fb_idx, fb_bit, 
+                     (framebuffer[fb_idx] >> fb_bit) & 1);
+        }
+    } else {
+        ESP_LOGW(TAG, "Pixel (%d,%d) outside display!", phys_x, phys_y);
+    }
+}
+void epd_draw_rectangle(int x, int y, int width, int height, uint8_t color)
+{
+    // Rahmen zeichnen
+    for (int i = 0; i < width; i++) {
+        epd_set_pixel(x + i, y, color);                    // Oben
+        epd_set_pixel(x + i, y + height - 1, color);       // Unten
+    }
+
+    for (int i = 0; i < height; i++) {
+        epd_set_pixel(x, y + i, color);                    // Links
+        epd_set_pixel(x + width - 1, y + i, color);        // Rechts
+    }
+}
+
+void epd_fill_rectangle(int x, int y, int width, int height, uint8_t color)
+{
+    for (int row = 0; row < height; row++) {
+        for (int col = 0; col < width; col++) {
+            epd_set_pixel(x + col, y + row, color);
+        }
+    }
+}
+static void epd_clear_area(int x, int y, int width, int height, uint8_t color)
+{
+    ESP_LOGI(TAG, "Clearing area (%d,%d) size %dx%d with color %s", 
+             x, y, width, height, color == EPD_WHITE ? "WHITE" : "BLACK");
+
+    // Prüfe ob der Bereich überhaupt im sichtbaren Bereich liegt
+    if (x < 0 || x >= EPD_WIDTH || y < 0 || y >= EPD_HEIGHT) {
+        ESP_LOGW(TAG, "Area start outside display!");
+        return;
+    }
+    
+    if (x + width > EPD_WIDTH || y + height > EPD_HEIGHT) {
+        ESP_LOGW(TAG, "Area extends beyond display - clipping may occur");
+    }
+
+    int pixels_set = 0;
+    for (int row = 0; row < height; row++) {
+        for (int col = 0; col < width; col++) {
+            epd_set_pixel(x + col, y + row, color);
+            pixels_set++;
+        }
+    }
+    
+    ESP_LOGI(TAG, "Cleared %d pixels", pixels_set);
+}
+// Liest einen Pixel aus
+static uint8_t epd_get_pixel(int phys_x, int phys_y)
+{
+    uint32_t fb_idx, fb_bit;
+
+    if (epd_get_fb_position(phys_x, phys_y, &fb_idx, &fb_bit)) {
+        return (framebuffer[fb_idx] >> fb_bit) & 1;
+    }
+
+    return EPD_WHITE; // Default außerhalb des Bereichs
+}
 static void epd_send_command(uint8_t cmd)
 {
     gpio_set_level(PIN_DC, 0); // DC = 0 für Befehl
@@ -315,94 +423,44 @@ void epd_test_checkerboard(void)
 void epd_draw_string(int x, int y, const char *text,
                      const sFONT *font, uint8_t color)
 {
-    if (font == NULL)
-    {
-        ESP_LOGW(TAG, "Font is NULL");
-        return;
-    }
+    if (font == NULL || text == NULL) return;
 
-    ESP_LOGI(TAG, "Drawing string '%s' at (%d,%d) with color 0x%02X", text, x, y, color);
+    ESP_LOGI(TAG, "Drawing string '%s' at (%d,%d)", text, x, y);
+
+    // Berechne Breite des gesamten Strings
+    int text_width = strlen(text) * font->Width;
+
+    // Bereich vorher löschen
+    epd_clear_area(x, y, text_width, font->Height, EPD_WHITE);
 
     uint32_t x_pos = x;
-    uint32_t y_pos = y;
-    int char_count = 0;
 
-    while (*text)
-    {
+    while (*text) {
         uint32_t char_idx = *text - ' ';
 
-        if (char_idx >= 95)
-        {
-            ESP_LOGW(TAG, "Character '%c' (0x%02X) out of range", *text, *text);
+        if (char_idx >= 95) {
+            ESP_LOGW(TAG, "Character '%c' out of range", *text);
             text++;
             continue;
         }
 
         const uint8_t *glyph_data = font->table + char_idx * font->Height * ((font->Width + 7) / 8);
 
-        if (char_count == 0)
-        {
-            ESP_LOGI(TAG, "First char '%c': idx=%d, width=%d, height=%d",
-                     *text, char_idx, font->Width, font->Height);
-            ESP_LOGI(TAG, "Glyph data: %02X %02X %02X %02X",
-                     glyph_data[0], glyph_data[1], glyph_data[2], glyph_data[3]);
-        }
-
-        // Schreibe Pixel - WICHTIG: Koordinatenumrechnung für gedrehtes Display
-        // Physikalische Position (x, y) → RAM Position
-        // Das Display ist um 90° gedreht: phys_x → ram_y, phys_y → ram_x
-        for (uint32_t row = 0; row < font->Height && y_pos + row < EPD_HEIGHT; row++)
-        {
-            for (uint32_t col = 0; col < font->Width && x_pos + col < EPD_WIDTH; col++)
-            {
+        // Zeichne Glyphe
+        for (uint32_t row = 0; row < font->Height; row++) {
+            for (uint32_t col = 0; col < font->Width; col++) {
                 uint32_t byte_idx = row * ((font->Width + 7) / 8) + col / 8;
                 uint32_t bit_idx = 7 - (col % 8);
 
                 uint8_t pixel = (glyph_data[byte_idx] >> bit_idx) & 1;
 
-                if (pixel)
-                {
-                    // Koordinaten-Transformation: 90° Drehung
-                    // phys(x,y) -> ram(y, width-1-x)
-                    // uint32_t ram_x = y_pos + row;
-                    uint32_t ram_x = (EPD_RAM_WIDTH - 1) - (y_pos + row);
-                    uint32_t ram_y = x_pos + col;
-
-                    // Prüfe Grenzen im RAM-Koordinatensystem
-                    if (ram_x < EPD_RAM_WIDTH && ram_y < EPD_RAM_HEIGHT)
-                    {
-                        uint32_t fb_idx = ram_y * (EPD_RAM_WIDTH / 8) + ram_x / 8;
-                        uint32_t fb_bit = 7 - (ram_x % 8);
-                        // uint32_t fb_bit = ram_x % 8;
-
-                        if (fb_idx < sizeof(framebuffer))
-                        {
-                            if (color == EPD_BLACK)
-                            {
-                                framebuffer[fb_idx] &= ~(1 << fb_bit);
-                            }
-                            else
-                            {
-                                framebuffer[fb_idx] |= (1 << fb_bit);
-                            }
-                        }
-                    }
+                if (pixel) {
+                    epd_set_pixel(x_pos + col, y + row, color);
                 }
             }
         }
 
         x_pos += font->Width;
         text++;
-        char_count++;
     }
-
-    ESP_LOGI(TAG, "Drew %d characters", char_count);
-
-    // Debug
-    ESP_LOGI(TAG, "FB after text - bytes 400-407:");
-    for (int i = 400; i < 408 && i < sizeof(framebuffer); i++)
-    {
-        printf("%02X ", framebuffer[i]);
-    }
-    printf("\n");
 }

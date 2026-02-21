@@ -35,10 +35,12 @@ void app_main(void)
 
     ntp_init();
     obtain_time();
-
+    epd_init();
+    epd_clear(EPD_WHITE);
+    epd_display();
     // Zeitzone setzen (Deutschland)
     setenv("TZ", "CET-1CEST,M3.5.0,M10.5.0/3", 1);
     tzset();
-
+    epd_draw_string(0, 0, "NFC Terminal Dienstplan", &Font12, EPD_BLACK);
     xTaskCreate(time_task, "time_task", 4096, NULL, 5, NULL);
 }

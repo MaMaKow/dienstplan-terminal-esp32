@@ -9,6 +9,7 @@ idf_component_register(
         "wifi_manager.c" 
         "time_manager.c"
         "epaper_manager.c"
+        "display_framebuffer.c"
     INCLUDE_DIRS
         "."
 )

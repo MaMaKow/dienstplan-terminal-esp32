@@ -1,9 +1,6 @@
 #pragma once
 #include <stdint.h>
-#include "fonts.h"
-
-#define EPD_WHITE 0xFF
-#define EPD_BLACK 0x00
+#include "display_framebuffer.h"
 
 void epd_init(void);
 void epd_clear(uint8_t color);

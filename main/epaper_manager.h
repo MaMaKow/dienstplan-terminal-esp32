@@ -2,6 +2,11 @@
 #include <stdint.h>
 #include "display_framebuffer.h"
 
+// Shared clock layout for rendering.
+#define EPD_TIME_X 10
+#define EPD_TIME_Y 20
+#define EPD_TIME_FONT Font48
+
 void epd_init(void);
 void epd_clear(uint8_t color);
 void epd_display(void);

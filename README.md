@@ -52,3 +52,18 @@ hardwareunabhängigen Modul `main/display_framebuffer.c`. Ein PC-Vorschauprogram
 kann dieses Modul direkt verwenden und den Puffer als PGM-Bild speichern. So
 lassen sich Layout, Schrift und Koordinaten ohne ESP32 prüfen; SPI, WLAN, NTP
 und das echte E-Paper bleiben Hardwaretests.
+
+## E-Paper-Refresh
+
+Beim Full Refresh schreibt `epd_display()` denselben vollständigen Framebuffer
+in beide SSD1680-RAM-Bänke: zuerst über `CMD_WRITE_RAM_BW` (`0x24`), danach
+über `CMD_WRITE_OLD_RAM` (`0x26`). Das erneute Setzen des vollen RAM-Fensters
+setzt den Adresszähler vor dem zweiten Schreibvorgang zurück. Der SSD1680
+schaltet seine RAM-Bänke nach einem Refresh um; beide Bänke müssen deshalb vor
+dem Full Refresh dasselbe Bild enthalten. So startet der folgende Quick Refresh
+mit einem konsistenten alten Bild. Der Quick-Pfad überträgt weiterhin das alte
+Bild nach `0x26` und das neue Bild nach `0x24`.
+
+Zur Untersuchung des zuvor sichtbaren Fehlers wurden zeitlich angehaltene
+Refresh-Sequenzen und ein Diagnosefont mit Markern verwendet. Nach der Prüfung
+wurden diese Diagnosemittel wieder entfernt.

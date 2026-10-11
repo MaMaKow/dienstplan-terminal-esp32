@@ -6,6 +6,7 @@ idf_component_register(
         "font16.cpp"
         "font20.cpp"
         "font24.cpp"
+        "font48.cpp"
         "wifi_manager.c" 
         "time_manager.c"
         "epaper_manager.c"

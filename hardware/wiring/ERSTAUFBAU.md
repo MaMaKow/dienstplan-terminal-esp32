@@ -34,12 +34,12 @@ Alle GPIO-Vorschläge beziehen sich auf das vorhandene ESP32-DevKitC-Symbol und 
 | `SCK` | 2 | GPIO18 (`SCK`) |
 | `MOSI` | 3 | GPIO23 (`MOSI`) |
 | `MISO` | 4 | GPIO19 (`MISO`) |
-| `IRQ` | 5 | Nicht anschließen |
+| `IRQ` | 5 | Derzeit nicht angeschlossen; GPIO für späteren Wakeup noch festzulegen |
 | `GND` | 6 | `GND` |
 | `RST` | 7 | GPIO26 |
 | `3.3V` | 8 | `3V3` |
 
-Die Nummern 1–8 des MFRC522-Headers gelten mit der Antennenseite nach vorn und der Pinleiste oben, von links nach rechts; vor dem Stecken trotzdem die Silkscreen-Aufdrucke auf dem eigenen Modul kontrollieren. Der MFRC522-Aufdruck `SDA` meint bei der SPI-Verdrahtung Chip Select, nicht den I²C-Datenbus. Das E-Paper verwendet GPIO18/23 gemeinsam für `CLK`/`DIN`; seine übrigen Anschlüsse sind `CS` → GPIO5, `DC` → GPIO17, `RST` → GPIO16, `BUSY` → GPIO4, `VCC` → `3V3` und `GND` → `GND`. Die vorhandene Display-Firmware konfiguriert den SPI-Bus derzeit mit `MISO = -1`; für den MFRC522 muss der gemeinsame Bus in der Firmware zusätzlich GPIO19 als MISO verwenden und der Leser als eigenes SPI-Gerät mit separatem Chip-Select registriert werden. Die Verdrahtung allein aktiviert den NFC-Leser also noch nicht. Die E-Paper-Stecker-Pinnummern hängen von der konkreten Breakout-Platine ab; hier sind daher bewusst deren Signalsilkscreens statt einer geratenen Nummerierung angegeben.
+Die Nummern 1–8 des MFRC522-Headers gelten mit der Antennenseite nach vorn und der Pinleiste oben, von links nach rechts; vor dem Stecken trotzdem die Silkscreen-Aufdrucke auf dem eigenen Modul kontrollieren. Der MFRC522-Aufdruck `SDA` meint bei der SPI-Verdrahtung Chip Select, nicht den I²C-Datenbus. Das E-Paper verwendet GPIO18/23 gemeinsam für `CLK`/`DIN`; seine übrigen Anschlüsse sind `CS` → GPIO5, `DC` → GPIO17, `RST` → GPIO16, `BUSY` → GPIO4, `VCC` → `3V3` und `GND` → `GND`. Die Firmware verwendet für den gemeinsamen SPI-Bus zusätzlich GPIO19 als MISO; der MFRC522 ist ein eigenes SPI-Gerät mit separatem Chip-Select. Die Verdrahtung allein aktiviert den NFC-Leser also noch nicht. Für die geplante IRQ-Wakeup-Strategie muss ein geeigneter RTC-GPIO festgelegt, die IRQ-Leitung dorthin geführt und die Wakeup-Konfiguration in der Firmware ergänzt werden. Die E-Paper-Stecker-Pinnummern hängen von der konkreten Breakout-Platine ab; hier sind daher bewusst deren Signalsilkscreens statt einer geratenen Nummerierung angegeben.
 
 ### RGB-LED
 

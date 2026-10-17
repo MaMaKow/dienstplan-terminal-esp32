@@ -65,6 +65,7 @@ Zu definieren und serverseitig bereitzustellen:
 
 - Bestehenden Ablauf in die vereinbarten Module aufteilen.
 - Zustandsautomaten für Ruhezustand, Kartenabfrage, Mitarbeiterrückmeldung, Aktionsauswahl, Buchung, Ergebnis und Timeout einführen.
+- UI-Zugriffe auf das E-Paper zentral serialisieren. Im UI-Zustandsautomaten eine neue UID nach dem Scan etwa zehn Sekunden sichtbar priorisieren und erst danach die Uhranzeige übernehmen; die Anzeigefrist darf nicht durch den periodischen Uhr-Task übersprungen werden.
 - API-Client mit Zeitlimits, TLS-Zertifikatsprüfung, JSON-Verarbeitung und klarer Trennung von Transport- und fachlichen Fehlern aufbauen.
 - Den Zehn-Sekunden-Timeout nach erfolgreicher Kartenauflösung umsetzen.
 - Die Anzeige von Datum/Uhrzeit im Ruhezustand und Mitarbeitername/Aktionsstatus im Buchungsablauf gestalten.
@@ -99,7 +100,22 @@ Zu definieren und serverseitig bereitzustellen:
 
 **Abnahmekriterium:** Ein Firmwareupdate kann über den vorgesehenen Updateweg eingespielt werden; ein fehlgeschlagenes Update lässt das Gerät wieder startfähig.
 
-### 6. Erprobung im Apothekenbetrieb und Mehrgerätefähigkeit
+### 6. Batteriebetrieb und Stromsparen
+
+- Power-Path- und Akku-Konzept aus [hardware/EINKAUFSLISTE.md](hardware/EINKAUFSLISTE.md) zuerst festlegen. Ohne eine geeignete Versorgung und einen definierten Messpunkt ist eine Laufzeitbewertung im Deep Sleep nicht aussagekräftig.
+- Zielbild: ESP32 im Deep Sleep und MFRC522 im Shutdown-Modus (`CommandReg = 0x03`, Zielwert laut Modul-/Datenblattbetrachtung etwa 10 µA). Das Aufwachen und Wiederanlaufen der Antenne muss so abgestimmt werden, dass eine Karte danach zuverlässig erkannt wird.
+- **Strategie A – MFRC522-IRQ als Wakeup-Quelle:** IRQ an einen geeigneten RTC-GPIO des ESP32 führen und Ext0/Ext1-Wakeup verwenden. Dazu `ComIEnReg`/`DivIEnReg` passend konfigurieren, IRQ-Leitung und Pegel im realen Aufbau prüfen und Antennen-Zyklus sowie Aufwachzeit der Karte berücksichtigen. IRQ ist im aktuellen Aufbau nicht angeschlossen; GPIO-Auswahl und Verdrahtung bleiben offen.
+- **Strategie B – Timer-Wakeup als Fallback:** ESP32 beispielsweise alle 3 Sekunden per Timer aufwecken, MFRC522 aufwecken/initialisieren, Antenne aktivieren und Kartenabfrage durchführen. Danach bei ausbleibender Karte wieder in den Schlaf gehen. Zu beachten sind die zusätzliche Energie für Aufwach- und Antennenzyklen, die mögliche Erkennungsverzögerung bis zum nächsten Poll und die nötige Zeit für den Kartenaufbau im Feld. Eine Karte, die während eines Schlafintervalls nur kurz vorgehalten wird, kann verpasst werden.
+- IRQ-Pfad im Schaltplan und Aufbau dokumentieren; der MFRC522-IRQ kann abhängig von Registerkonfiguration, Pegel und Ereignis kurz oder dauerhaft aktiv sein. Wakeup-Pegel, Latch-/Quittierungsverhalten und erneute Auslösung nach dem Aufwachen praktisch erproben.
+
+**Abnahmekriterien:**
+
+- Standby-Strom von ESP32 im Deep Sleep plus MFRC522 im Shutdown am Akku-/Versorgungseingang messen und unter einem gemeinsam festzulegenden Grenzwert von **X mA** halten; Messpunkt und angeschlossene Peripherie dokumentieren.
+- Aufwachlatenz von Kartenannäherung bis zur UID-Anzeige auf dem E-Paper unter einem gemeinsam festzulegenden Grenzwert von **Y ms** halten.
+- Mindestlaufzeit mit der vorhandenen Panasonic NCR18650B für ein definiertes Nutzungsprofil (als Ausgangspunkt beispielsweise 200 Scans pro Tag) messen und festlegen.
+- Gewählte Wakeup-Strategie erkennt Karten nach wiederholten Schlaf-/Aufwachzyklen zuverlässig; IRQ- oder Timer-Fallback ist nachvollziehbar dokumentiert.
+
+### 7. Erprobung im Apothekenbetrieb und Mehrgerätefähigkeit
 
 - Hardwareablauf mit echten Karten, WLAN-Ausfall, API-Fehlern und typischen Buchungsfolgen erproben.
 - Feedback, Lesbarkeit und Bedienzeit im realen Montageort beurteilen.
@@ -110,6 +126,9 @@ Zu definieren und serverseitig bereitzustellen:
 
 ## Noch zu klären
 
+- Soll der MFRC522-IRQ-Pin fest verdrahtet werden, und welcher geeignete RTC-GPIO wird dafür verwendet? Der Pin ist aktuell nicht angeschlossen; siehe [hardware/wiring/ERSTAUFBAU.md](hardware/wiring/ERSTAUFBAU.md).
+- Welche maximale Aufwachlatenz (Karte bis UID-Anzeige) und welche Mindestlaufzeit mit der NCR18650B werden gefordert? Welches Scan-/Schlafprofil gilt für die Messung?
+- Wie soll sich das Gerät bei leerem Akku verhalten, und wie werden Zellschutz sowie Tiefentladeschutz im finalen Power-Path-Konzept sichergestellt?
 - Welcher NFC-Leser und welcher Kartentyp werden eingesetzt, und welches Interface verwendet der Leser?
 - Welche vier beleuchteten Tasten und welche RGB-LED-/Piezo-Hardware werden konkret verwendet?
 - Wie registriert die Smartphone-App eine Karte: über einen Online-Scan mit dem Smartphone oder über ein anderes Verfahren? Das Terminal ist nicht am Zuordnungsablauf beteiligt.
@@ -121,7 +140,7 @@ Zu definieren und serverseitig bereitzustellen:
 
 ## Aktueller Projektstand
 
-- Vorhanden sind eine ESP-IDF-Anwendung für ESP32, WLAN-Verbindung, NTP-Zeitabgleich, E-Paper-Treiber für ein 2,9-Zoll-SSD1680-Display, Framebuffer und einfache Zeit-/Datumsanzeige. Der aktuelle Anwendungscode enthält noch keinen NFC-Buchungsablauf, keine Tasten-/LED-/Buzzer-Ansteuerung, keine Dienstplan-API-Kommunikation, keine SoftAP-Konfiguration und keine OTA-Funktion.
+- Vorhanden sind eine ESP-IDF-Anwendung für ESP32, WLAN-Verbindung, NTP-Zeitabgleich, E-Paper-Treiber für ein 2,9-Zoll-SSD1680-Display, Framebuffer, einfache Zeit-/Datumsanzeige sowie ein MFRC522-Testleser für 4-Byte-UIDs. Die aktuelle Firmware läuft im Dauerbetrieb: kein Deep Sleep, der MFRC522 bleibt aktiv. Ein NFC-Buchungsablauf, Tasten-/LED-/Buzzer-Ansteuerung, Dienstplan-API-Kommunikation, SoftAP-Konfiguration und OTA-Funktion fehlen noch.
 - Weiterhin vorhanden ist folgende Hardware:
   - 1 Passiver Buzzer
   - große und kleine Taster

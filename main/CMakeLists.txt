@@ -9,6 +9,7 @@ idf_component_register(
         "font48.cpp"
         "wifi_manager.c" 
         "time_manager.c"
+        "nfc_reader.c"
         "epaper_manager.c"
         "display_framebuffer.c"
     INCLUDE_DIRS

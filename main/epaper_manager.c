@@ -8,6 +8,7 @@ static const char *TAG = "EPAPER";
 #include "driver/spi_master.h"
 #include "esp_log.h"
 #include "freertos/task.h"
+#include "freertos/semphr.h"
 
 // SSD1680-Speichergeometrie für die Controller-Konfiguration.
 #define EPD_RAM_WIDTH 128
@@ -21,9 +22,10 @@ static const char *TAG = "EPAPER";
 // SPI
 #define PIN_CLK 18 // SCLK
 #define PIN_DIN 23 // MOSI
-#define SPI_HOST VSPI_HOST
+#define EPD_SPI_HOST VSPI_HOST
 
 static spi_device_handle_t spi = NULL;
+static SemaphoreHandle_t epd_mutex;
 static uint8_t last_command;
 // SSD1680 Commands
 #define CMD_DRIVER_OUTPUT_CONTROL 0x01
@@ -182,6 +184,9 @@ static void epd_reset(void) {
 void epd_init(void) {
   ESP_LOGI(TAG, "Initializing e-Paper display 2.9\"");
 
+  epd_mutex = xSemaphoreCreateMutex();
+  ESP_ERROR_CHECK(epd_mutex != NULL ? ESP_OK : ESP_ERR_NO_MEM);
+
   // GPIO Konfiguration
   gpio_config_t io_conf = {.mode = GPIO_MODE_OUTPUT,
                            .pin_bit_mask = (1ULL << PIN_CS) | (1ULL << PIN_DC) |
@@ -200,7 +205,8 @@ void epd_init(void) {
 
   // SPI Initialisierung
   spi_bus_config_t buscfg = {
-      .miso_io_num = -1,
+      // MFRC522 teilt CLK/MOSI mit dem E-Paper und benötigt MISO.
+      .miso_io_num = 19,
       .mosi_io_num = PIN_DIN,
       .sclk_io_num = PIN_CLK,
       .quadwp_io_num = -1,
@@ -215,8 +221,8 @@ void epd_init(void) {
       .queue_size = 7,
   };
 
-  ESP_ERROR_CHECK(spi_bus_initialize(SPI_HOST, &buscfg, SPI_DMA_CH_AUTO));
-  ESP_ERROR_CHECK(spi_bus_add_device(SPI_HOST, &devcfg, &spi));
+  ESP_ERROR_CHECK(spi_bus_initialize(EPD_SPI_HOST, &buscfg, SPI_DMA_CH_AUTO));
+  ESP_ERROR_CHECK(spi_bus_add_device(EPD_SPI_HOST, &devcfg, &spi));
 
   epd_reset();
   epd_wait_busy("init-hw-reset", false);
@@ -273,6 +279,16 @@ void epd_init(void) {
 
   ESP_LOGI(TAG, "e-Paper display initialized");
   ESP_LOGI(TAG, "Framebuffer size: %u bytes", (unsigned)epd_fb_size());
+}
+
+void epd_lock(void) {
+  configASSERT(epd_mutex != NULL);
+  xSemaphoreTake(epd_mutex, portMAX_DELAY);
+}
+
+void epd_unlock(void) {
+  configASSERT(epd_mutex != NULL);
+  xSemaphoreGive(epd_mutex);
 }
 
 void epd_clear(uint8_t color) {

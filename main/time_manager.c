@@ -73,9 +73,11 @@ void time_task(void *pvParameters)
                  "%H:%M", &timeinfo);
 
         ESP_LOGD(TAG, "Aktuelle Zeit: %s", strftime_buf);
+        epd_lock();
         epd_draw_string(EPD_TIME_X, EPD_TIME_Y, time_buf, &EPD_TIME_FONT, EPD_BLACK);
         epd_draw_string(10, 90, date_buf, &Font16, EPD_BLACK);
         epd_display();
+        epd_unlock();
 
         // If a full panel refresh exceeded the 1 s period, skip missed ticks
         // instead of immediately replaying them and issuing back-to-back EPD

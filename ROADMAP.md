@@ -77,7 +77,14 @@ Zu definieren und serverseitig bereitzustellen:
 - NFC-Leser und Kartenerkennung einbinden.
 - Vier Tasten für Dienstbeginn, Dienstende, Pausenbeginn und Pausenende einbinden.
 - Tastenbeleuchtung aus der Aktionsliste des Servers ableiten; nicht erlaubte Tasten bleiben aus.
-- RGB-LED und Piezo für mindestens Erfolg, fachliche Ablehnung und technische Störung verwenden.
+- Passiven Piezo-Buzzer vorläufig an **GPIO25** anschließen. Der Pin ist in der aktuellen Firmware nicht belegt und gehört nicht zu den üblichen ESP32-Boot-Strapping-Pins. Vor dem Löten Pinbelegung des konkreten DevKitC und Schaltplan prüfen; GPIO25 im gemeinsamen Pinplan reservieren. Den Buzzer mit LEDC/PWM ansteuern (Startwert: 2 kHz Trägerfrequenz); kurze Tonfolgen nicht-blockierend abspielen, damit NFC-Abfrage, Tasten, Netzwerk und Display weiterlaufen.
+- Als erste, klar unterscheidbare Signale umsetzen:
+  - **Karte gelesen:** ein heller Ton von etwa 50 ms bei erfolgreicher UID-Lesung. Das bestätigt nur das Lesen, noch keine Kartenberechtigung oder Buchung.
+  - **Buchung erfolgreich:** drei aufsteigende Töne, jeweils etwa 100 ms, mit etwa 50 ms Pause. Erst nach einer positiven Buchungsantwort der API abspielen.
+  - **Buchung/API fehlgeschlagen:** zwei tiefe Töne von jeweils etwa 180 ms mit etwa 100 ms Pause. Bei WLAN-/Serverausfall erst nach dem abschließenden Fehler des aktuellen Vorgangs abspielen, nicht für jeden internen Wiederholungsversuch.
+  - **Nicht erlaubte Taste:** zunächst kein eigenes Signal; die Taste wird ignoriert und die zulässigen Tasten bleiben durch Beleuchtung erkennbar. Ein kurzer tiefer Ablehnungston kann später ergänzt werden, falls Tests zeigen, dass die stille Rückmeldung nicht ausreicht.
+- Die konkreten Frequenzen der Signaltöne (Startwerte: 1,8 kHz für Karte gelesen, 1,4/1,8/2,2 kHz für Erfolg und 900/700 Hz für Fehler) als zentrale Konstanten definieren und am realen Piezo auf Hörbarkeit und Angenehmheit abstimmen. Signale kurz halten und Erfolg, Kartenlesung und Fehler nicht allein über Lautstärke unterscheiden.
+- RGB-LED ergänzend für Erfolg, fachliche Ablehnung und technische Störung verwenden; Ton und LED müssen dieselbe bestätigte Zustandsentscheidung abbilden. Die API-Antwort bleibt maßgeblich.
 - Entprellung, wiederholte NFC-Erkennung und Abbruch/Timeout berücksichtigen.
 
 **Abnahmekriterium:** Eine bekannte Karte zeigt Name und ausschließlich zulässige Tasten; eine unbekannte Karte wird abgelehnt; jede Buchung verlangt einen neuen Scan und liefert eine eindeutige Rückmeldung.
@@ -130,11 +137,11 @@ Zu definieren und serverseitig bereitzustellen:
 - Welche maximale Aufwachlatenz (Karte bis UID-Anzeige) und welche Mindestlaufzeit mit der NCR18650B werden gefordert? Welches Scan-/Schlafprofil gilt für die Messung?
 - Wie soll sich das Gerät bei leerem Akku verhalten, und wie werden Zellschutz sowie Tiefentladeschutz im finalen Power-Path-Konzept sichergestellt?
 - Welcher NFC-Leser und welcher Kartentyp werden eingesetzt, und welches Interface verwendet der Leser?
-- Welche vier beleuchteten Tasten und welche RGB-LED-/Piezo-Hardware werden konkret verwendet?
+- Welche vier beleuchteten Tasten und welche RGB-LED-/Piezo-Hardware werden konkret verwendet? GPIO25 ist für den passiven Piezo vorgesehen, muss aber vor dem Löten mit der konkreten DevKitC-Version und dem Schaltplan abgeglichen werden.
 - Wie registriert die Smartphone-App eine Karte: über einen Online-Scan mit dem Smartphone oder über ein anderes Verfahren? Das Terminal ist nicht am Zuordnungsablauf beteiligt.
 - Unterstützt die API OAuth 2.0 bereits, oder wird ein schlanker Geräteauthentifizierungs-Endpunkt benötigt? Wie werden Gerätezugangsdaten erstellt, erneuert und widerrufen?
 - Welche konkrete Antwort soll die API bei der Kartenauflösung liefern, insbesondere Mitarbeitername, aktueller Zustand und Aktionsliste?
-- Welche Displaydauer und genauen LED-/Piezo-Muster gelten für Erfolg, Ablehnung und technische Fehler?
+- Sind die vorgeschlagenen Frequenzen und Dauern der LED-/Piezo-Signale am realen Aufbau gut hörbar und im Apothekenbetrieb angenehm? Die Startwerte stehen in Etappe 3; nach Erprobung festlegen.
 - Welche HTTPS-Zertifikatsstrategie und OTA-Quelle werden verwendet?
 - Soll das Gerät nach einem Stromausfall den letzten Betriebszustand nur aus dem Server neu laden? (Empfehlung: ja; keine Buchungszustände lokal als maßgeblich speichern.)
 

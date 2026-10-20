@@ -12,35 +12,41 @@
  */
 #include "buzzer.h"
 #include "driver/ledc.h"
+#include "esp_log.h"
 #include "esp_timer.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/queue.h"
+#include "freertos/task.h"
 #include <stdbool.h>
-// #include "freertos/FreeRTOS.h"
-// #include "freertos/task.h"
+#include <stdio.h>
+#include <string.h>
 static gpio_num_t s_pin;
 static size_t s_current_index;  // aktueller Schritt
 static size_t s_current_length; // Anzahl Schritte der Sequenz
 static int64_t s_next_step_us;  // Deadline in esp_timer-Mikrosekunden
 static bool s_initialized = false;
+static volatile int s_pending_sound = -1;
+static const char *TAG = "DIENSTPLAN_TERMINAL_BUZZER";
 #define BUZZER_CHANNEL LEDC_CHANNEL_0
 #define BUZZER_TIMER LEDC_TIMER_0
-#define BUZZER_DUTY_ON (0x7F) // ~50 % bei LEDC_TIMER_8_BIT
+#define BUZZER_DUTY_ON (0x05) // 0x7F = ~50 % bei LEDC_TIMER_8_BIT
 typedef struct {
   uint16_t freq_hz;     // 0 = Pause (kein Ton)
   uint16_t duration_ms; // Dauer dieses Schritts
 } buzzer_tone_t;
 static const buzzer_tone_t *s_current_seq; // NULL = nichts läuft
 static const buzzer_tone_t s_seq_card_read[] = {
-    {1800, 50},
+    {1800, 100},
 };
 
 static const buzzer_tone_t s_seq_success[] = {
-    {1400, 100}, {0, 50}, {1800, 100}, {0, 50}, {2200, 100},
+    {1400, 100}, {0, 150}, {1800, 100}, {0, 50}, {2400, 300},
 };
 
 static const buzzer_tone_t s_seq_failure[] = {
     {900, 180},
-    {0, 100},
-    {700, 180},
+    {0, 50},
+    {500, 360},
 };
 typedef struct {
   const buzzer_tone_t *tones;
@@ -81,24 +87,33 @@ esp_err_t buzzer_init(gpio_num_t pin) {
   if (ESP_OK != err_channel) {
     return err_channel;
   }
+  ledc_fade_func_install(0); // 0 = keine besonderen Flags
   s_initialized = true;
   return ESP_OK;
 }
 static void s_output_step(const buzzer_tone_t *step) {
+  esp_err_t freq_err = ESP_OK;
   if (0 == step->freq_hz) {
     // Pause: nur abschalten, Frequenz unverändert lassen
-    ledc_set_duty(LEDC_LOW_SPEED_MODE, BUZZER_CHANNEL, 0);
-    ledc_update_duty(LEDC_LOW_SPEED_MODE, BUZZER_CHANNEL);
+    ledc_set_duty_and_update(LEDC_LOW_SPEED_MODE, BUZZER_CHANNEL, 0, 0);
   } else {
     // Ton: erst Frequenz, dann Duty (vermeidet Tonreste)
     // Verzichte auf Rückgabewerte der Funktion. Frequenzen sind statisch
     // validiert, Fehler hier sind Programmierfehler keine Laufzeitfehler.
-    ledc_set_freq(LEDC_LOW_SPEED_MODE, BUZZER_TIMER, step->freq_hz);
-    ledc_set_duty(LEDC_LOW_SPEED_MODE, BUZZER_CHANNEL, BUZZER_DUTY_ON);
-    ledc_update_duty(LEDC_LOW_SPEED_MODE, BUZZER_CHANNEL);
+    freq_err = ledc_set_freq(LEDC_LOW_SPEED_MODE, BUZZER_TIMER, step->freq_hz);
+    ledc_set_duty_and_update(LEDC_LOW_SPEED_MODE, BUZZER_CHANNEL,
+                             BUZZER_DUTY_ON, 0);
   }
   s_next_step_us = esp_timer_get_time() + (int64_t)step->duration_ms * 1000;
 }
+static void s_start_sequence(buzzer_sound_t sound) {
+  const buzzer_tone_t *tones = s_sequences[sound].tones;
+  s_current_length = s_sequences[sound].length;
+  s_current_index = 0;
+  s_output_step(&tones[0]);
+  s_current_seq = tones;
+}
+
 // Sequenz starten (überschreibt ggf. laufende Töne)
 void buzzer_play(buzzer_sound_t sound) {
   if (true != s_initialized) {
@@ -108,20 +123,19 @@ void buzzer_play(buzzer_sound_t sound) {
       sound >= (int)(sizeof(s_sequences) / sizeof(s_sequences[0]))) {
     return;
   }
-  // Laufende Sequenz sauber beenden, bevor neue Hardware-Zustände gesetzt
-  // werden
-  ledc_set_duty(LEDC_LOW_SPEED_MODE, BUZZER_CHANNEL, 0);
-  ledc_update_duty(LEDC_LOW_SPEED_MODE, BUZZER_CHANNEL);
-
-  s_current_seq = s_sequences[sound].tones;
-  s_current_length = s_sequences[sound].length;
-  s_current_index = 0;
-  s_output_step(&s_current_seq[0]);
+  s_pending_sound = (int)sound;
 }
 
 // aus Hauptschleife oder eigenem Task periodisch aufrufen
 void buzzer_update(void) {
+  int pending = s_pending_sound;
+  if (pending >= 0) {
+    s_pending_sound = -1;
+    s_start_sequence((buzzer_sound_t)pending);
+    return;
+  }
   if (!buzzer_is_playing()) {
+    // ESP_LOGI(TAG, "Buzzer is not playing, return.");
     return;
   }
   if (esp_timer_get_time() < s_next_step_us) {
@@ -129,6 +143,7 @@ void buzzer_update(void) {
   }
   s_current_index++;
   if (s_current_index >= s_current_length) {
+    ESP_LOGI(TAG, "End of Index, no more sound to play.");
     buzzer_stop();
     return;
   }

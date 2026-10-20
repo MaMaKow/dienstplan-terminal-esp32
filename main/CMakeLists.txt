@@ -12,6 +12,7 @@ idf_component_register(
         "nfc_reader.c"
         "epaper_manager.c"
         "display_framebuffer.c"
+        "buzzer.c"
     INCLUDE_DIRS
         "."
 )

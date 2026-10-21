@@ -74,16 +74,14 @@ Zu definieren und serverseitig bereitzustellen:
 
 ### 3. NFC, Tasten und Rückmeldung integrieren
 
-- NFC-Leser und Kartenerkennung einbinden.
+- [x] NFC-Leser und Test-Kartenerkennung für 4-Byte-UIDs einbinden; produktive Auflösung über die API steht noch aus.
 - Vier Tasten für Dienstbeginn, Dienstende, Pausenbeginn und Pausenende einbinden.
 - Tastenbeleuchtung aus der Aktionsliste des Servers ableiten; nicht erlaubte Tasten bleiben aus.
-- Passiven Piezo-Buzzer vorläufig an **GPIO25** anschließen. Der Pin ist in der aktuellen Firmware nicht belegt und gehört nicht zu den üblichen ESP32-Boot-Strapping-Pins. Vor dem Löten Pinbelegung des konkreten DevKitC und Schaltplan prüfen; GPIO25 im gemeinsamen Pinplan reservieren. Den Buzzer mit LEDC/PWM ansteuern (Startwert: 2 kHz Trägerfrequenz); kurze Tonfolgen nicht-blockierend abspielen, damit NFC-Abfrage, Tasten, Netzwerk und Display weiterlaufen.
-- Als erste, klar unterscheidbare Signale umsetzen:
-  - **Karte gelesen:** ein heller Ton von etwa 50 ms bei erfolgreicher UID-Lesung. Das bestätigt nur das Lesen, noch keine Kartenberechtigung oder Buchung.
-  - **Buchung erfolgreich:** drei aufsteigende Töne, jeweils etwa 100 ms, mit etwa 50 ms Pause. Erst nach einer positiven Buchungsantwort der API abspielen.
-  - **Buchung/API fehlgeschlagen:** zwei tiefe Töne von jeweils etwa 180 ms mit etwa 100 ms Pause. Bei WLAN-/Serverausfall erst nach dem abschließenden Fehler des aktuellen Vorgangs abspielen, nicht für jeden internen Wiederholungsversuch.
-  - **Nicht erlaubte Taste:** zunächst kein eigenes Signal; die Taste wird ignoriert und die zulässigen Tasten bleiben durch Beleuchtung erkennbar. Ein kurzer tiefer Ablehnungston kann später ergänzt werden, falls Tests zeigen, dass die stille Rückmeldung nicht ausreicht.
-- Die konkreten Frequenzen der Signaltöne (Startwerte: 1,8 kHz für Karte gelesen, 1,4/1,8/2,2 kHz für Erfolg und 900/700 Hz für Fehler) als zentrale Konstanten definieren und am realen Piezo auf Hörbarkeit und Angenehmheit abstimmen. Signale kurz halten und Erfolg, Kartenlesung und Fehler nicht allein über Lautstärke unterscheiden.
+- [x] Passiven Piezo-Buzzer vorläufig an **GPIO25** anbinden und über LEDC/PWM ansteuern. Die Sequenz wird nicht-blockierend in einem eigenen Task fortgeschaltet; `buzzer_play()` legt den gewünschten Ton zur späteren Ausgabe ab.
+- [x] NFC-Testkarten anhand einer fest im Firmwarecode hinterlegten 4-Byte-UID-Whitelist unterscheiden. Bekannte Testkarten lösen derzeit den Erfolgs- und unbekannte Karten den Fehlerklang aus. Das ist nur ein Hardware-/Ablauftest und keine Kartenberechtigung durch den Server.
+- [x] Einen aktiven-low-Taster an **GPIO33** mit internem Pull-up und einfacher Entprellung einlesen. Beim Drücken ertönt vorläufig der Fehlerklang als Platzhalter für die noch nicht implementierten Buchungsaktionen.
+- Implementierte Testsignale (Frequenz und Schrittzeit): **Karte gelesen** 1,8 kHz/100 ms (im Treiber vorhanden, derzeit nicht im NFC-Ablauf aufgerufen); **Erfolg** 1,4 kHz/100 ms, 150 ms Pause, 1,8 kHz/100 ms, 50 ms Pause, 2,4 kHz/300 ms; **Fehler** 900 Hz/180 ms, 50 ms Pause, 500 Hz/360 ms. Am realen Piezo auf Hörbarkeit und Angenehmheit abstimmen.
+- Vorläufige Testsignale nach Implementierungsstand bewerten und danach an die fachlichen Zustände anbinden: Kartenlesung muss von Kartenberechtigung unterscheidbar sein; Erfolgs- und Fehlerklang für Buchungen dürfen erst eine API-Entscheidung abbilden. Eine nicht erlaubte Taste hat im Zielablauf zunächst kein eigenes Signal.
 - RGB-LED ergänzend für Erfolg, fachliche Ablehnung und technische Störung verwenden; Ton und LED müssen dieselbe bestätigte Zustandsentscheidung abbilden. Die API-Antwort bleibt maßgeblich.
 - Entprellung, wiederholte NFC-Erkennung und Abbruch/Timeout berücksichtigen.
 
@@ -147,7 +145,7 @@ Zu definieren und serverseitig bereitzustellen:
 
 ## Aktueller Projektstand
 
-- Vorhanden sind eine ESP-IDF-Anwendung für ESP32, WLAN-Verbindung, NTP-Zeitabgleich, E-Paper-Treiber für ein 2,9-Zoll-SSD1680-Display, Framebuffer, einfache Zeit-/Datumsanzeige sowie ein MFRC522-Testleser für 4-Byte-UIDs. Die aktuelle Firmware läuft im Dauerbetrieb: kein Deep Sleep, der MFRC522 bleibt aktiv. Ein NFC-Buchungsablauf, Tasten-/LED-/Buzzer-Ansteuerung, Dienstplan-API-Kommunikation, SoftAP-Konfiguration und OTA-Funktion fehlen noch.
+- Vorhanden sind eine ESP-IDF-Anwendung für ESP32, WLAN-Verbindung, NTP-Zeitabgleich, E-Paper-Treiber für ein 2,9-Zoll-SSD1680-Display, Framebuffer sowie ein MFRC522-Testleser für 4-Byte-UIDs. NFC zeigt gelesene UIDs; eine Test-Whitelist löst derzeit Erfolgs-/Fehlerklänge aus. Ein passiver Piezo ist per LEDC an GPIO25 angebunden, ein entprellter Testtaster an GPIO33 spielt vorläufig den Fehlerklang. Der Buzzer-Treiber enthält außerdem einen separaten Kartenleseton, der im NFC-Ablauf noch nicht verwendet wird. Es gibt noch keinen produktiven Buchungsablauf oder Serverabgleich: die Whitelist ist fest im Code hinterlegt. Der MFRC522 bleibt aktiv (kein Deep Sleep). Tastenbeleuchtung, RGB-LED-Ansteuerung, Dienstplan-API-Kommunikation, SoftAP-Konfiguration und OTA-Funktion fehlen noch.
 - Weiterhin vorhanden ist folgende Hardware:
   - 1 Passiver Buzzer
   - große und kleine Taster

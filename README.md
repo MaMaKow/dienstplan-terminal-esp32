@@ -1,5 +1,16 @@
 # Dienstplan-Terminal
 
+## Aktueller Hardware-Prototyp
+
+Der Teststand liest 4-Byte-UIDs mit dem MFRC522. Eine fest in der Firmware
+hinterlegte Test-Whitelist löst für bekannte bzw. unbekannte Karten
+unterschiedliche Buzzerfolgen aus; sie ersetzt keine Serverprüfung und ist
+nicht für den produktiven Betrieb gedacht. Der passive Piezo wird über LEDC an
+GPIO25 angesteuert. Ein entprellter, aktiv-low Testtaster an GPIO33 spielt
+vorläufig den Fehlerklang als Platzhalter. Die Buchungsaktionen, API-Anbindung
+und Tastenbeleuchtung sind noch nicht umgesetzt. Weitere Details stehen in der
+[Roadmap](ROADMAP.md) und im [Verdrahtungsleitfaden](hardware/wiring/ERSTAUFBAU.md).
+
 ## ESP-IDF einrichten und bauen
 
 Das Projekt benötigt ESP-IDF. Der Wert von `IDF_PATH` ist der Ordner, in dem

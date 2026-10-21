@@ -17,6 +17,7 @@ Die Liste unterscheidet bereits vorhandene Teile von noch benötigten Teilen. Pr
 | USB-C-TP4056-Ladeboard mit Schutz-Ausgang | Vorhanden. Die Platine hat `B+`, `B-`, `OUT+`, `OUT-`; Zellschutz ist vorhanden, ein Power-Path für gleichzeitigen Betrieb ist damit nicht nachgewiesen. |
 | AMS1117-3.3-Reglermodule | Vorhanden, aber nicht für die Versorgung des Terminals aus der einzelnen Zelle vorgesehen. |
 | Kingbright RGB-LED L-154A4SURKQBDZGC | Vorhanden; gemeinsame Kathode, Vorwiderstand je Farbkanal erforderlich. |
+| Passiver Piezo-Buzzer | Für einen Funktionstest in der Firmware an GPIO25 (LEDC/PWM) vorgesehen. Konkreten Signalgeber und zulässige Ansteuerung vor dem Anschluss prüfen. |
 
 ## Noch zu beschaffen oder festzulegen
 
@@ -28,7 +29,6 @@ Die Liste unterscheidet bereits vorhandene Teile von noch benötigten Teilen. Pr
 | 1 | **USB-Netzteil für den Ladebetrieb**, 5 V, mindestens 2 A, mit passendem Kabel zum gewählten Lade-/Power-Path-Modul. | Conrad; erst nach Auswahl des Moduls bestellen. Ein 5-V/1-A-Eingang kann bei gleichzeitiger Last den Ladestrom begrenzen. |
 | 4 | **Momentane Taster** für Dienstbeginn, Dienstende, Pausenbeginn und Pausenende. Mechanische Bauform, Einbaudurchmesser und Beleuchtung müssen zum Gehäuse passen. | Conrad bevorzugt; Artikel noch offen. Bei integrierter LED deren Spannung und Anschluss vor Kauf prüfen. Alternative: Taster plus je eine separate Anzeige-LED. |
 | 4 | **LED-Anzeigen für die vier Tasten**, falls nicht in den Tastern enthalten; getrennt steuerbar, mit geeigneter Treiberstufe und individuellem Vorwiderstand. | Conrad bevorzugt; konkrete LEDs und Widerstandswerte nach Festlegung der Versorgung und Taster. |
-| 1 | **Aktiver Piezo-Signalgeber**, für Versorgung und Lautstärke passend; Ansteuerung über eine geeignete Treiberstufe, falls der GPIO-Strom nicht genügt. Conrad listet den TRU COMPONENTS TC-9202108 als 3-V/DC-Dauerton-Kandidat; Datenblatt und Eignung an 3,3 V vor Bestellung prüfen. | [Conrad-Signalgeber-Sortiment](https://www.conrad.de/de/o/schallwandler-signalgeber-1312030.html?tfo_productType=Piezo-Signalgeber) – Kandidat TC-9202108. |
 | nach Schaltung | Treibertransistoren bzw. MOSFETs, Widerstände und Entkopplungskondensatoren für Tastenbeleuchtung, RGB-LED, Piezo und Versorgung. | Conrad; konkrete Typen und Werte nach Schaltungsentwurf. |
 | nach Gehäuse | Montage-/Verdrahtungsmaterial: passende Leitungen, Steckverbinder, Befestigung, Gehäuse und Zugentlastung für Akku und USB-C. | Conrad bevorzugt; Abmessungen und Stecksystem noch offen. |
 

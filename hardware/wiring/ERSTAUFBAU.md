@@ -16,6 +16,8 @@ flowchart LR
   ESP -->|GPIO| NFC
   ESP -->|GPIO: CS, DC, RST, BUSY| EPD
   ESP -->|GPIO + Vorwiderstand| LED[RGB-LED, zunächst Rot testen]
+  ESP -->|GPIO25 / PWM| BUZZER[Passiver Piezo-Buzzer]
+  ESP <-->|GPIO33, aktiv LOW| BUTTON[Testtaster]
   USB2[Separater USB-5-V-Anschluss] -->|USB-C| CHG[Vorhandenes TP4056-Ladeboard]
   CHG <-->|B+ / B-| CELL[18650-Zelle]
 ```
@@ -47,6 +49,16 @@ Die vorhandene Kingbright L-154A4SURKQBDZGC ist eine RGB-LED mit gemeinsamer Kat
 
 Pin 3 ist Blau und Pin 4 Grün. Das Datenblatt nennt für Blau und Grün jeweils etwa 3,3 V typische Durchlassspannung. Diese Farben haben an einer 3,3-V-GPIO-Versorgung praktisch keine Reserve für einen sinnvollen Vorwiderstand. Blau und Grün deshalb vorerst nicht direkt an GPIOs anschließen; dafür braucht es eine passende Treiberschaltung und Versorgung. Die LED-Pinnummerierung ist im Datenblatt auf der Gehäusezeichnung angegeben.
 
+### Buzzer und Testtaster
+
+Die Firmware verwendet GPIO25 für den passiven Piezo-Buzzer (LEDC/PWM). GPIO33
+ist als Testtaster-Eingang konfiguriert: Taster zwischen GPIO33 und `GND`, der
+interne Pull-up hält den Eingang im Ruhezustand auf HIGH. Die Firmware entprellt
+den Eingang und spielt beim Drücken derzeit den Fehlerklang als Platzhalter.
+Vor dem Anschließen des konkreten Piezo-Moduls dessen Stromaufnahme und
+Anschlussart prüfen; eine Treiberstufe verwenden, falls der Signalgeber nicht
+direkt am GPIO betrieben werden darf.
+
 ## Taster-Pinplan (Vorschlag, falls die vorhandenen Taster verwendet werden)
 
 Alle Taster schalten den jeweiligen ESP32-Eingang gegen `GND` (aktiv LOW). GPIO34, GPIO35, GPIO36 und GPIO39 sind nur Eingänge und haben keine internen Pull-ups; deshalb pro Eingang einen externen 10-kΩ-Widerstand nach `3V3` vorsehen.
@@ -73,7 +85,9 @@ Das TP4056-Board hat Zellschutz, aber keinen nachgewiesenen Power-Path. Ein geme
 ## Noch nicht verdrahtet
 
 - Vier Bedientaster und ihre Leuchtanzeigen; die Einkaufsliste führt sie als noch festzulegende Teile.
-- Piezo-Buzzer und dessen Treiber.
+- Buzzer und Testtaster sind in der Firmware auf GPIO25 bzw. GPIO33 vorgesehen;
+  Verdrahtung und Eignung des konkreten Piezo-Signalgebers am Tischaufbau noch
+  prüfen.
 - Akkuversorgung des Terminals sowie Betrieb aus Akku und Laden über einen einzelnen Geräteeingang. Dafür fehlt ein passendes Lade-/Power-Path- und Versorgungskonzept.
 - Anschluss des konkreten E-Paper-Breakouts: `VCC`-Spannungsbereich und Pinreihenfolge am Modul prüfen.
 

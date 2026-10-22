@@ -25,10 +25,11 @@ Unbekannte Karten werden abgelehnt. Bei nicht verfügbarem WLAN oder Server wird
 
 ## Einrichtungs- und Betriebsentscheidungen
 
-- Ein noch nicht konfiguriertes Gerät startet einen offenen SoftAP zur Einrichtung. In diesem Zustand liegen noch keine geheimen Zugangsdaten auf dem Gerät.
-- Bei der Einrichtung wird die Filiale des Terminals ausgewählt.
-- Sind bereits Zugangsdaten gespeichert, wird der SoftAP erst durch eine Taste aktiviert. Das Display weist auf diese Taste hin. Ein Wechsel zum SoftAP nach 24 h Offline-Zeit wird vorgeschlagen und muss per Taste aktiviert werden.
-- Die Einrichtung erfasst mindestens WLAN-Zugangsdaten, API-Adresse, Filiale und die vom Server ausgestellte Geräteidentität bzw. Gerätezugangsdaten.
+- Ein noch nicht konfiguriertes Gerät startet einen SoftAP mit zufällig erzeugtem WPA2-Passwort, das auf dem Display angezeigt wird. Das Smartphone verbindet sich mit diesem Netz und übermittelt WLAN-Zugangsdaten an die lokale Einrichtungsseite.
+- Während der Provisionierung bleibt der SoftAP im Modus WIFI_AP_STA geöffnet, während die Station (STA) die Serververbindung aufbaut. Nach erfolgreicher Freigabe werden SoftAP und Einrichtungsseite geschlossen; das Gerät bleibt im STA-Modus.
+- Das Gerät registriert sich mit einem generierten Namen `Dienstplan-Terminal-$Datum-Zeit` am Server. Ein Sicherheitscode auf dem Display wird von einem eingeloggten Admin im Web-UI eingegeben, um das physische Gerät Out-of-Band zu bestätigen. Admin-Zugangsdaten werden nie am Terminal eingegeben.
+- Das Gerät pollt bis zur Freigabe und erhält anschließend `client_id` und `client_secret` einmalig. Provisionierungszustand und Konfiguration werden im NVS gespeichert, damit das Gerät nach einem Stromausfall im korrekten Zustand fortfahren kann.
+- Bei gespeicherter Konfiguration wird der SoftAP zur WLAN-Wiederherstellung nach 24 h Offline-Zeit geöffnet. Es erscheint wieder ein zufälliges WPA2 Passwort auf dem Display.
 - Jedes Terminal authentifiziert sich mit eigenen Zugangsdaten am Server. Mitarbeiterkonten werden nicht für die Geräteanmeldung verwendet.
 - NFC wird zunächst ohne kryptografische Kartenauthentifizierung verwendet. Die Kartenkennung dient zur Identifikation und Zuordnung.
 - Eine Smartphone-App übernimmt die Zuordnung von NFC-Karten zu Mitarbeitenden unabhängig vom Terminal. Unbekannte Karten werden am Terminal nicht registriert.
@@ -38,13 +39,27 @@ Unbekannte Karten werden abgelehnt. Bei nicht verfügbarem WLAN oder Server wird
 
 - Der Server verwaltet alle Zustandsregeln. Das Terminal zeigt die vom Server zurückgegebenen erlaubten Aktionen an und verlässt sich nicht auf eine dauerhaft lokal gepflegte Kopie der Regeln.
 - Der Server validiert eine Aktion erneut, wenn die Buchung abgeschickt wird. Eine zuvor erlaubte Taste garantiert noch keinen Buchungserfolg.
-- API-Aufrufe erfolgen über HTTPS mit Zertifikatsprüfung. Für Geräteauthentifizierung wird eine pro Gerät widerrufbare Identität benötigt. OAuth 2.0 Client Credentials mit kurzlebigen Tokens ist eine geeignete Standardoption; Authentifizierungsverfahren, Token-Laufzeit und Provisionierung müssen mit der Server-API abgestimmt werden.
+- API-Aufrufe erfolgen über HTTPS mit Zertifikatsprüfung. Geräte authentifizieren sich nach dem Claim-and-Approve-Provisioning mit OAuth 2.0 Client Credentials; kurzlebige JWTs tragen Scope `terminal` sowie `device_id` und `branch_id`. Es gibt keine Refresh-Tokens. Bei Geräte-Rotation oder Widerruf werden ausgestellte Tokens invalidiert. Die endgültige Token-Laufzeit ist noch zu klären.
 - Der Gerätezugang erhält nur die Rechte, die für Filialbindung, Mitarbeiter-/Kartenauflösung und Buchungen nötig sind.
 - Die Firmware wird in Module gegliedert: Anwendungsablauf/Zustandsautomat, NFC, Tasten, LED/Buzzer, E-Paper/Framebuffer, WLAN und SoftAP, Konfiguration, API-Client, Zeitverwaltung und OTA.
 - Die REST-Schnittstelle liefert maschinenlesbare Fehlercodes und kurze, für Mitarbeitende verständliche Meldungen. Technische Details gehören in das Geräteprotokoll, nicht auf die Anzeige.
 - Buchungsanfragen sollten eine eindeutige Vorgangskennung unterstützen, damit Wiederholungen nach Verbindungsabbrüchen keine Doppelbuchung verursachen.
 
 ## Etappen
+
+### ESP32-Implementierung – Meilensteine und Server-Abhängigkeiten
+
+Die folgenden Firmware-Meilensteine konkretisieren die Etappen darunter. Der zugehörige Server-Vertrag steht in [docs/api_contract_v1_draft.md](docs/api_contract_v1_draft.md); benötigte Server-Endpunkte müssen parallel verfügbar sein.
+
+1. **Firmware-Grundgerüst:** Module für WLAN, NVS-Konfiguration, API-Client, Display, NFC und Anwendungszustandsautomat abgrenzen; Build-Konfiguration und Diagnoseprotokoll vorbereiten. **Abhängigkeit:** noch keine neuen Server-Endpunkte.
+2. **Provisioning und Claim-and-Approve:** Zufallspasswort und SoftAP anzeigen, lokale WLAN-Einrichtungsseite bereitstellen, WIFI_AP_STA-Verbindung aufbauen, Registrierung mit generiertem Gerätenamen und Sicherheitscode durchführen, Status bis zur Freigabe pollen, einmalig Client-Zugangsdaten übernehmen und SoftAP schließen. Zustände stromausfallsicher im NVS fortsetzen. **Server-Abhängigkeit:** unauthentifizierte, rate-limitierte Registrierung; Admin-Pending-Liste und Freigabe mit Sicherheitscode; Status-Poll mit Claim-Token; Ausgabe der Geräte-Credentials nach Freigabe.
+3. **Token-Handling:** Client Credentials sicher im NVS speichern; per HTTPS Basic `POST /v1/device-auth/token` aufrufen, kurzlebiges JWT mit Scope `terminal` nutzen und bei Ablauf neu anfordern. Bei Rotation/Widerruf nicht endlos wiederholen. **Server-Abhängigkeit:** Token-Endpunkt, JWT-Validierung und Invalidierung ausgestellter Tokens.
+4. **NFC-Kartenlesen und Auflösung:** UID zuverlässig lesen und kanonisch übertragen; Kartenauflösung mit Gerätetoken anfragen und Mitarbeitername, Zustand sowie erlaubte Aktionen darstellen. **Server-Abhängigkeit:** `POST /v1/terminal/cards/resolve` sowie Kartenverwaltung und Filialbindung.
+5. **Buchungslogik:** Nur vom Server erlaubte Aktionstasten aktivieren; bei Tastendruck Buchung mit Idempotenz-Key senden und nur bestätigte Serverantwort als Erfolg anzeigen. **Server-Abhängigkeit:** `POST /v1/terminal/bookings` mit serverseitiger Zustandsprüfung und Idempotenz.
+6. **Display und UX:** Zustandsabhängige Hinweise für Einrichtung, Freigabewarten, Erfolg, Ablehnung und Offline-Störung; Sicherheitscode und WPA2-Passwort nur in den passenden Setup-Zuständen anzeigen. **Server-Abhängigkeit:** stabile Fehlercodes, `userMessage` und Statuswerte gemäß API-Contract.
+7. **Robustheit und Offline-Verhalten:** explizite Zustandsmaschine, Watchdog, begrenzte Netzwerk-Timeouts, WLAN-Wiederverbindung, Stromausfall-Wiederaufnahme, kein lokales Puffern von Buchungen und SoftAP-Wiederherstellung per Taste. **Server-Abhängigkeit:** definierte Authentifizierungs-/Widerrufsfehler und Provisionierungs-Timeouts; Offline wird keine Buchung angenommen.
+
+**Im Provisioning noch ❓ zu klären:** endgültige Token-Laufzeit (Vorschlag 15 Minuten), Poll-Intervall und Timeout der Freigabephase, Ablaufzeit für Pending-Registrierungen (Vorschlag 15 Minuten) sowie Länge und Format des Display-Sicherheitscodes.
 
 ### 1. API-Verträge und App-Zuordnung festlegen
 
@@ -89,8 +104,8 @@ Zu definieren und serverseitig bereitzustellen:
 
 ### 4. Geräteeinrichtung und WLAN-Wiederherstellung
 
-- SoftAP-Konfigurationsseite für WLAN, API-Adresse, Filiale und Gerätezugangsdaten erstellen.
-- Unkonfigurierten Start in den Einrichtungsmodus führen.
+- SoftAP-Konfigurationsseite für WLAN-Zugangsdaten erstellen; API-Adresse wird gemäß Deployment konfiguriert.
+- Unkonfigurierten Start in den Claim-and-Approve-Einrichtungsmodus führen; Filialbindung und Gerätezugangsdaten kommen erst durch die serverseitige Admin-Freigabe.
 - Bei gespeicherter Konfiguration den SoftAP nach Verlust des WLAN nur nach Tastendruck öffnen und den Tastenschritt auf dem Display erklären.
 - Konfiguration persistent und sicherheitsbewusst speichern; Zugangsdaten nicht protokollieren oder anzeigen.
 - WLAN-Wiederverbindung und verständliche Offline-Anzeige umsetzen. Offline-Buchungen werden abgelehnt.
@@ -112,6 +127,7 @@ Zu definieren und serverseitig bereitzustellen:
 - **Strategie A – MFRC522-IRQ als Wakeup-Quelle:** IRQ an einen geeigneten RTC-GPIO des ESP32 führen und Ext0/Ext1-Wakeup verwenden. Dazu `ComIEnReg`/`DivIEnReg` passend konfigurieren, IRQ-Leitung und Pegel im realen Aufbau prüfen und Antennen-Zyklus sowie Aufwachzeit der Karte berücksichtigen. IRQ ist im aktuellen Aufbau nicht angeschlossen; GPIO-Auswahl und Verdrahtung bleiben offen.
 - **Strategie B – Timer-Wakeup als Fallback:** ESP32 beispielsweise alle 3 Sekunden per Timer aufwecken, MFRC522 aufwecken/initialisieren, Antenne aktivieren und Kartenabfrage durchführen. Danach bei ausbleibender Karte wieder in den Schlaf gehen. Zu beachten sind die zusätzliche Energie für Aufwach- und Antennenzyklen, die mögliche Erkennungsverzögerung bis zum nächsten Poll und die nötige Zeit für den Kartenaufbau im Feld. Eine Karte, die während eines Schlafintervalls nur kurz vorgehalten wird, kann verpasst werden.
 - IRQ-Pfad im Schaltplan und Aufbau dokumentieren; der MFRC522-IRQ kann abhängig von Registerkonfiguration, Pegel und Ereignis kurz oder dauerhaft aktiv sein. Wakeup-Pegel, Latch-/Quittierungsverhalten und erneute Auslösung nach dem Aufwachen praktisch erproben.
+- Vergleichende Entscheidungstests für Deep Sleep, Modem-Sleep und Auto Light-Sleep mit Messaufbau, Vorgehen, Messgrößen und Kriterien sind in [docs/entscheidungstests_stromsparen.md](docs/entscheidungstests_stromsparen.md) festgehalten.
 
 **Abnahmekriterien:**
 
@@ -141,7 +157,7 @@ Zu definieren und serverseitig bereitzustellen:
 - Welche konkrete Antwort soll die API bei der Kartenauflösung liefern, insbesondere Mitarbeitername, aktueller Zustand und Aktionsliste?
 - Sind die vorgeschlagenen Frequenzen und Dauern der LED-/Piezo-Signale am realen Aufbau gut hörbar und im Apothekenbetrieb angenehm? Die Startwerte stehen in Etappe 3; nach Erprobung festlegen.
 - Welche HTTPS-Zertifikatsstrategie und OTA-Quelle werden verwendet?
-- Soll das Gerät nach einem Stromausfall den letzten Betriebszustand nur aus dem Server neu laden? (Empfehlung: ja; keine Buchungszustände lokal als maßgeblich speichern.)
+- Wie lange bleiben einmalig ausgestellte Geräte-Credentials während der Claim-Übergabe bis zur NVS-Speicherung und Empfangsbestätigung serverseitig verfügbar?
 
 ## Aktueller Projektstand
 

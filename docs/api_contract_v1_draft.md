@@ -2,11 +2,15 @@
 
 **Status:** Draft, Version 1  
 **Projekt:** `dienstplan-terminal-esp32`  
-**Stand:** 17. Oktober 2026
+**Stand:** 21. Oktober 2026
+
+**Änderungshinweis:** Neu in diesem Entwurf sind die Claim-and-Approve-Geräteprovisionierung, Pending-Registrierungen, Sicherheitscode-Freigabe, Claim-Token-Statusabfrage, Rate-Limiting-Vorgaben und Geräteumbenennung. Die zuvor vorgesehene manuelle Geräteanlage bleibt als Admin-Funktion beschrieben; sie ersetzt nicht den neuen Terminal-Inbetriebnahmefluss.
 
 ## 1. Zweck und Geltungsbereich
 
 Dieser Entwurf beschreibt die neuen HTTPS-Verträge für Geräteverwaltung, Geräteanmeldung, NFC-Kartenauflösung und Dienstbuchungen des ESP32-Terminals sowie für die Kartenverwaltung durch eine Smartphone-App. Die bestehende Benutzer-API v0.3.0 bleibt unverändert; ihre Endpunkte werden hier nur als Bestand referenziert. Alle Beispiele zeigen JSON. Pfade, Claims und Statuswerte sind Vorschläge und müssen vor Implementierungsbeginn mit der Server-API abgestimmt werden.
+
+Die zugehörigen Firmware-Meilensteine und Server-Abhängigkeiten sind in [ROADMAP.md](../ROADMAP.md) dokumentiert.
 
 ## 2. Konventionen
 
@@ -23,7 +27,7 @@ Dieser Entwurf beschreibt die neuen HTTPS-Verträge für Geräteverwaltung, Ger�
 - Jeder Aufruf erfolgt über HTTPS mit Zertifikatsprüfung. Das Terminal darf Zertifikatsfehler nicht übergehen.
 - Geräte-Endpunkte verwenden `Authorization: Bearer <access_token>`.
 - Benutzer-Endpunkte der App verwenden die bestehende Benutzeranmeldung und deren Bearer-Token. Das Gerätegeheimnis darf niemals für Benutzer-Endpunkte verwendet werden.
-- Provisionierungs-Endpunkte sind gesondert geschützt (siehe Abschnitt 4); öffentliche Selbstregistrierung eines Terminals ist nicht vorgesehen.
+- Provisionierungs-Endpunkte sind gesondert geschützt (siehe Abschnitt 4). Ausschließlich die initiale Selbstregistrierung des Terminals ist unauthentifiziert und muss rate-limited sein; Pending-Liste und Freigabe bleiben Admin-Endpunkte.
 - Bei `401 TOKEN_EXPIRED` darf der Client einmal ein neues Token anfordern und den ursprünglichen Aufruf wiederholen. Bei anderen `401`-Fehlern darf er nicht in einer Schleife wiederholen.
 
 ### Zeitstempel
@@ -54,13 +58,13 @@ Die bestehende Benutzer-API bietet unter anderem `POST /auth/login`, `GET /users
 
 ## 3. Geräteauthentifizierung
 
-### Entscheidungsvorschlag: OAuth 2.0 Client Credentials
+### Festgelegtes Verfahren: OAuth 2.0 Client Credentials
 
-Jedes Terminal erhält eine eigene `client_id` und ein eigenes widerrufbares Client-Geheimnis. Es tauscht diese am Token-Endpunkt gegen ein kurzlebiges Bearer-Token mit Gerätekennung und Filialkontext. Vorgeschlagene Laufzeit: 15 Minuten. Das Terminal speichert Client-Geheimnis und Refresh-/Access-Tokens nicht im Klartext im Log. Es fordert ein neues Access-Token mit Client Credentials an, statt ein langlebiges Refresh-Token zu verwenden.
+Jedes Terminal erhält eine eigene `client_id` und ein eigenes widerrufbares Client-Geheimnis. Es tauscht diese am Token-Endpunkt gegen ein kurzlebiges Bearer-Token mit Gerätekennung und Filialkontext. **Vorschlag:** Laufzeit 15 Minuten; die endgültige Laufzeit ist ❓ zu klären. Es gibt keine Refresh-Tokens. Das Terminal speichert Client-Geheimnis und Access-Tokens nicht im Klartext im Log und fordert ein neues Access-Token per Client Credentials an. Bei Rotation oder Widerruf werden bereits ausgestellte Tokens des Geräts invalidiert.
 
 Vorteile: standardisiertes Verfahren, kurzlebige API-Tokens, gezielte Rechte und einzeln widerrufbare Geräte. Nachteile: zusätzlicher Token-Endpunkt und sichere Provisionierung des Client-Geheimnisses erforderlich.
 
-### Alternative: direktes Gerätegeheimnis
+### Verworfene Alternative für diesen Ablauf: direktes Gerätegeheimnis
 
 Eine schlanke Alternative ist `client_id` plus `client_secret` als HTTP Basic- oder dedizierte Authentifizierungsdaten bei jedem Aufruf. Das spart Token-Logik, erhöht aber die Zahl der Übertragungen des langlebigen Geheimnisses und erschwert Rechte- und Laufzeitbegrenzung. Auch diese Variante braucht TLS, Rotation und Widerruf pro Gerät. Sie ist nur dann vorzuziehen, wenn OAuth in der bestehenden Serverumgebung unverhältnismäßig aufwendig ist.
 
@@ -104,9 +108,157 @@ Fehlerantwort `401`:
 
 Validierung: `grant_type` muss `client_credentials` sein; Zugangsdaten müssen gültig sein; gesperrte Geräte erhalten kein Token. Token sind nur für den vorgesehenen Gerätescope und die gebundene Filiale gültig.
 
-## 4. Geräteverwaltung
+## 4. Geräteverwaltung und Claim-and-Approve-Provisionierung
 
-Geräteverwaltung ist eine administrative Funktion, keine offene Terminal-Selbstregistrierung. Die folgenden Admin-Endpunkte verwenden einen gesonderten Provisionierungs- oder Admin-Scope, hier als `Bearer <provisioning_admin_token>` dargestellt. Der genaue Betreiber- und Rollenprozess ist offen.
+**Neu in diesem Entwurf:** Die Inbetriebnahme folgt Claim-and-Approve. Das Gerät baut einen SoftAP mit zufälligem WPA2-Passwort auf, das lokal auf dem Display gezeigt wird. Das Smartphone übermittelt WLAN-Zugangsdaten an die lokale ESP32-Webseite. Im WIFI_AP_STA-Modus bleibt der SoftAP für das Smartphone offen, während das Gerät den Server erreicht. Die Registrierung wird vom Gerät selbst mit einem generierten Namen wie `Dienstplan-Terminal-2026-10-21-08-15` gestartet. Ein eingeloggter Admin vergleicht den auf dem Display angezeigten Sicherheitscode mit der Pending-Registrierung im Admin-Web-UI und bestätigt sie durch Eingabe des Codes (Out-of-Band-Verifikation). Erst nach Freigabe liefert der Server einmalig `client_id` und `client_secret` an das Gerät. Admin-Credentials werden nie am Terminal eingegeben. Danach schließt das Gerät den SoftAP und wechselt in den STA-Betrieb.
+
+Die folgenden Admin-Endpunkte verwenden einen gesonderten Provisionierungs- oder Admin-Scope, hier als `Bearer <provisioning_admin_token>` dargestellt. Der genaue Betreiber- und Rollenprozess ist offen. Die Admin-Web-UI benötigt eine Pending-Geräteliste und einen Freigabe-Dialog zur Eingabe des Display-Sicherheitscodes.
+
+### Pending-Registrierungen speichern
+
+**Vorschlag für Datenbankstruktur (`device_registration_claims`):**
+
+```sql
+CREATE TABLE device_registration_claims (
+    id                  VARCHAR(64) PRIMARY KEY,
+    generated_name      VARCHAR(128) NOT NULL,
+    claim_token_hash    VARCHAR(255) NOT NULL UNIQUE,
+    security_code_hash  VARCHAR(255) NOT NULL,
+    status              VARCHAR(16) NOT NULL,
+    requested_at        TIMESTAMP NOT NULL,
+    expires_at          TIMESTAMP NOT NULL,
+    approved_at         TIMESTAMP NULL,
+    approved_by         VARCHAR(64) NULL,
+    device_id           VARCHAR(64) NULL,
+    consumed_at         TIMESTAMP NULL,
+    client_id           VARCHAR(128) NULL,
+    client_secret_ciphertext TEXT NULL
+);
+```
+
+Claim-Token und Sicherheitscode werden nur geschützt gespeichert; Rohwerte werden nur bei Erzeugung an das jeweilige Gerät ausgegeben. Das Claim-Token wird per kryptografisch sicherem Zufall erzeugt und an Status-Poll-Aufrufen mitgesendet. Für den kurzen Sicherheitscode ist ein serverseitiger HMAC/pepper oder ein gleichwertiger Schutz gegen Offline-Bruteforce vorzusehen. Nach Ablauf wird die Registrierung als abgelaufen behandelt und kann nicht mehr freigegeben oder eingelöst werden. **Vorschlag:** Pending-Ablauf nach 15 Minuten (❓ zu klären). Freigabe ist an einen Admin, Zeitstempel und ein aktives Pending-Element gebunden. `device_id` wird bei erfolgreicher Freigabe verknüpft.
+
+### Terminal registrieren (unauthentifiziert)
+
+#### `POST /v1/device-registrations`
+
+Startet eine ausstehende Registrierung. Authentifizierung: keine; ausschließlich HTTPS und Rate-Limiting. Request:
+
+```json
+{
+  "device_name": "Dienstplan-Terminal-2026-10-21-08-15",
+  "security_code": "482731"
+}
+```
+
+Der Server erzeugt ein zufälliges Claim-Token. Erfolgsantwort `201` (Claim-Token wird nur hier ausgegeben):
+
+```json
+{
+  "registration_id": "reg_01JAE7K5J9Z4T6Q2",
+  "claim_token": "one-time-claim-token",
+  "status": "pending",
+  "expires_at": "2026-10-21T08:30:00Z"
+}
+```
+
+Fehler bei Rate-Limit: `429` mit einheitlicher Fehlerstruktur und optionalem `Retry-After`. Die Registrierung darf keine `client_id`, kein `client_secret` und keinen Admin-Kontext annehmen.
+
+### Pending-Liste für Admins
+
+#### `GET /v1/admin/device-registrations?status=pending`
+
+Liefert nur noch nicht abgelaufene Pending-Registrierungen. Authentifizierung: Provisionierungs-Admin. Erfolgsantwort `200`:
+
+```json
+{
+  "registrations": [
+    {
+      "registration_id": "reg_01JAE7K5J9Z4T6Q2",
+      "device_name": "Dienstplan-Terminal-2026-10-21-08-15",
+      "status": "pending",
+      "requested_at": "2026-10-21T08:15:00Z",
+      "expires_at": "2026-10-21T08:30:00Z"
+    }
+  ]
+}
+```
+
+Der Sicherheitscode wird absichtlich nicht über die Liste zurückgegeben; der Admin muss ihn am Gerät ablesen und im Freigabe-Dialog eingeben.
+
+### Pending-Registrierung freigeben
+
+#### `POST /v1/admin/device-registrations/{registration_id}/approve`
+
+Bestätigt die physische Präsenz des Terminals durch Vergleich des Display-Codes. Authentifizierung: eingeloggter Admin mit Geräteverwaltungsrecht. Request:
+
+```json
+{
+  "security_code": "482731",
+  "branch_id": "42"
+}
+```
+
+Erfolgsantwort `200`:
+
+```json
+{
+  "registration_id": "reg_01JAE7K5J9Z4T6Q2",
+  "device_id": "dev_01JAE7K5J9Z4T6Q2",
+  "device_name": "Dienstplan-Terminal-2026-10-21-08-15",
+  "branch_id": "42",
+  "status": "approved",
+  "approved_at": "2026-10-21T08:18:00Z"
+}
+```
+
+Der Server validiert Code, Ablaufzeit, Admin-Berechtigung und Filiale atomar und erstellt bzw. bindet das Gerät. Falscher Code oder abgelaufene Registrierung wird abgelehnt; Beispiele für Codes sind `CLAIM_CODE_INVALID` (`403`) und `REGISTRATION_EXPIRED` (`410`). Der Code darf nicht in Logs oder API-Antworten reflektiert werden.
+
+### Freigabestatus pollen und Zugangsdaten einmalig abrufen
+
+#### `GET /v1/device-registrations/{registration_id}`
+
+Authentifizierung: `Authorization: Claim <claim_token>`. Das Gerät pollt diesen Endpunkt bis zur Freigabe oder zum Ablauf. Pending-Antwort `200`:
+
+```json
+{
+  "status": "pending",
+  "expires_at": "2026-10-21T08:30:00Z"
+}
+```
+
+Nach Freigabe erhält das Gerät bei `200`:
+
+```json
+{
+  "status": "approved",
+  "device_id": "dev_01JAE7K5J9Z4T6Q2",
+  "branch_id": "42",
+  "credentials": {
+    "client_id": "device_01JAE7K5J9Z4T6Q2",
+    "client_secret": "one-time-device-secret"
+  }
+}
+```
+
+Die Geräte-Credentials werden genau einmal erzeugt. Für einen zuverlässigen Transfer speichert der Server die einmalig erzeugten Credentials bis zur Empfangsbestätigung geschützt und liefert bei Wiederholung mit demselben gültigen Claim-Token exakt dieselben Werte zurück. Das Gerät schreibt die Credentials zuerst ins NVS und bestätigt danach den Empfang:
+
+#### `POST /v1/device-registrations/{registration_id}/ack`
+
+Authentifizierung: `Authorization: Claim <claim_token>`. Leerer JSON-Body `{}`. Erfolgsantwort `200`:
+
+```json
+{
+  "status": "consumed",
+  "device_id": "dev_01JAE7K5J9Z4T6Q2"
+}
+```
+
+Nach Empfangsbestätigung löscht der Server den temporären Ciphertext; spätere Statusabfragen enthalten keine Credentials mehr. Poll-Intervall und gesamtes Timeout der Freigabephase sind ❓ zu klären. Für fehlerhafte oder verbrauchte Claim-Tokens gilt die einheitliche Fehlerstruktur.
+
+### Rate-Limiting-Vorgaben für Registrierung und Statusabfrage
+
+**Neu in diesem Entwurf:** Der unauthentifizierte Registrierungsendpunkt muss pro Quell-IP begrenzt werden; zusätzlich sollen gleichzeitige Pending-Registrierungen begrenzt und abgelaufene Datensätze regelmäßig bereinigt werden. Statusabfragen sind pro Claim-Token rate-limited, damit ein kompromittiertes Token keine unnötige Last erzeugt. Admin-Endpunkte nutzen zusätzlich normale Benutzer-/Admin-Rate-Limits. Konkrete Schwellenwerte und `Retry-After`-Regeln sind ❓ mit dem Serverbetrieb festzulegen; Fehlerantworten dürfen weder gültige Codes noch Tokens offenlegen.
 
 ### Gerät anlegen und Filiale zuordnen
 
@@ -153,6 +305,32 @@ Fehlerantwort `404` bei unbekannter Filiale:
 ```
 
 Validierung: `device_name` ist erforderlich und innerhalb des Mandanten eindeutig; `branch_id` muss existieren und für den Admin zugänglich sein. Ein erfolgreicher Aufruf gibt das Geheimnis genau einmal zurück; der Server speichert es geschützt.
+
+### Gerätenamen ändern
+
+**Neu in diesem Entwurf:** Ein Admin kann den Anzeigenamen eines bereits provisionierten Geräts ändern. Der beim Claim erzeugte Name ist ein Startwert; spätere Umbenennung ändert weder `device_id` noch Zugangsdaten.
+
+#### `PATCH /v1/admin/devices/{device_id}`
+
+Authentifizierung: Provisionierungs-Admin. Request:
+
+```json
+{
+  "device_name": "terminal-apotheke-nord-01"
+}
+```
+
+Erfolgsantwort `200`:
+
+```json
+{
+  "device_id": "dev_01JAE7K5J9Z4T6Q2",
+  "device_name": "terminal-apotheke-nord-01",
+  "updated_at": "2026-10-21T08:20:00Z"
+}
+```
+
+Der Name muss innerhalb des Mandanten eindeutig sein. Dieser Endpunkt ändert keine Filialzuordnung und rotiert keine Credentials.
 
 ### Zugangsdaten erneuern
 
@@ -454,7 +632,11 @@ Validierung: UID muss syntaktisch gültig sein; Karte muss im Berechtigungsberei
 | 403 | `CARD_REVOKED` | Karte wurde widerrufen. | „Diese Karte ist nicht mehr gültig.“ |
 | 409 | `ACTION_NOT_ALLOWED` | Aktion ist im aktuellen Zustand nicht zulässig. | „Diese Buchung ist aktuell nicht möglich.“ |
 | 403 | `BRANCH_MISMATCH` | Gerät, Karte, Mitarbeiter oder Anfrage gehören nicht zur Filiale. | „Die Buchung ist für dieses Terminal nicht möglich.“ |
+| 403 | `CLAIM_CODE_INVALID` | Display-Sicherheitscode stimmt nicht oder ist nicht mehr gültig. | „Der Sicherheitscode ist ungültig.“ |
 | 400 | `VALIDATION_ERROR` | Feld fehlt, ist ungültig oder Idempotenz-Key wurde mit anderem Body wiederverwendet. | „Die Anfrage konnte nicht verarbeitet werden.“ |
+| 410 | `REGISTRATION_EXPIRED` | Pending-Registrierung oder Claim ist abgelaufen. | „Die Inbetriebnahme ist abgelaufen. Bitte erneut starten.“ |
+| 410 | `CLAIM_CONSUMED` | Claim wurde bereits bestätigt und kann keine Credentials mehr abrufen. | „Das Terminal wurde bereits eingerichtet.“ |
+| 429 | `RATE_LIMITED` | Aufrufrate überschritten. | „Bitte kurz warten und erneut versuchen.“ |
 | 500 | `SERVER_ERROR` | Unerwarteter interner Fehler. | „Der Vorgang ist fehlgeschlagen. Bitte erneut versuchen.“ |
 | 503 | `SERVICE_UNAVAILABLE` | Dienst ist vorübergehend nicht verfügbar. | „Der Server ist gerade nicht erreichbar.“ |
 HTTP 	Code 	Bedeutung 	userMessage-Beispiel 
@@ -510,10 +692,13 @@ Bei `503 SERVICE_UNAVAILABLE`, DNS-/TLS-Fehler oder Timeout zeigt das Terminal e
 
 - ❓ Welcher konkrete API-Host, Pfadpräfix und Mandantenkontext gelten in Entwicklung und Produktion?
 - ❓ Werden die neuen Verträge als `/v1` bereitgestellt oder an die vorhandene API-Versionierung angepasst?
-- ❓ Unterstützt die bestehende Serverplattform OAuth 2.0 Client Credentials? Falls nicht, wird die direkte Geheimnis-Alternative akzeptiert?
-- ❓ Wie werden Geräte initial provisioniert, und welche Rolle darf Geräte anlegen, Filialen ändern, Geheimnisse rotieren und Geräte widerrufen?
-- ❓ Wie wird ein Gerätegeheimnis sicher an das physische Terminal übertragen und dort geschützt gespeichert?
-- ❓ Welche Token-Laufzeit, Scopes und Widerrufslatenz sind verbindlich?
+- ❓ Welche Rolle darf Geräte freigeben, Filialen ändern, Geheimnisse rotieren und Geräte widerrufen?
+- ❓ Welche Token-Laufzeit (Vorschlag: 15 Minuten), Scopes und Widerrufslatenz sind verbindlich?
+- ❓ Welches Poll-Intervall und welcher Gesamt-Timeout gelten während der Freigabephase?
+- ❓ Wie lange bleiben Pending-Registrierungen gültig (Vorschlag: 15 Minuten)?
+- ❓ Welche Länge und welches Format erhält der Display-Sicherheitscode?
+- ❓ Welche konkreten Rate-Limit-Schwellen und `Retry-After`-Regeln gelten für Registrierung und Status-Poll?
+- ❓ Wie lange darf der Server die einmalig erzeugten Credentials bis zur Empfangsbestätigung geschützt vorhalten?
 - ❓ Welche NFC-UID-Längen und Byte-Reihenfolge liefern die eingesetzten Karten und der MFRC522? Wie wird die UID kanonisch normalisiert?
 - ❓ Ist `branch_id` immer fest an ein Terminal gebunden, und wie werden Filialwechsel administriert?
 - ❓ Welche Felder enthält der aktuelle Buchungszustand zusätzlich zu `off_duty`, `on_shift` und `on_break` (z. B. Krankheit, Urlaub, Sonderzustände)?

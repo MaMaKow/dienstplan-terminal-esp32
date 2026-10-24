@@ -2,3 +2,16 @@ build/
 .vscode/c_cpp_properties.json
 .vscode/settings.json
 main/secrets.h
+tools/mock-server/certs/mock-server.key
+tools/mock-server/certs/*.key
+tools/mock-server/certs/*.csr
+tools/mock-server/certs/*.crt
+tools/mock-server/certs/*.srl
+tools/mock-server/certs/dev-ca.pem
+tools/mock-server/data/state.json
+tools/mock-server/data/state.json.tmp
+tools/mock-server/data/.credentials.key
+tools/mock-server/data/.security.pepper
+
+tools/mock-server/certs/.san-runtime.*
+.php-cs-fixer.cache

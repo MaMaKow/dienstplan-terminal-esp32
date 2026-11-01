@@ -9,7 +9,7 @@ Die Liste unterscheidet bereits vorhandene Teile von noch benötigten Teilen. Pr
 ## Bereits vorhanden – nicht erneut kaufen
 
 | Bauteil | Stand / Hinweis |
-|---|---|
+| --- | --- |
 | ESP32-DevKitC | Im Projekt bzw. Schaltplan vorgesehen. Exakte Boardversion vor Festlegung der Versorgung prüfen. |
 | 2,9-Zoll-E-Paper mit SSD1680 | Vorhandener Displaytreiber im Projekt. |
 | RF-IO-RC522 / MFRC522-Lesemodul | Vorhanden; für 3,3-V-Logik vorgesehen. |
@@ -17,15 +17,15 @@ Die Liste unterscheidet bereits vorhandene Teile von noch benötigten Teilen. Pr
 | USB-C-TP4056-Ladeboard mit Schutz-Ausgang | Vorhanden. Die Platine hat `B+`, `B-`, `OUT+`, `OUT-`; Zellschutz ist vorhanden, ein Power-Path für gleichzeitigen Betrieb ist damit nicht nachgewiesen. |
 | AMS1117-3.3-Reglermodule | Vorhanden, aber nicht für die Versorgung des Terminals aus der einzelnen Zelle vorgesehen. |
 | Kingbright RGB-LED L-154A4SURKQBDZGC | Vorhanden; gemeinsame Kathode, Vorwiderstand je Farbkanal erforderlich. |
+| **1x-18650-Halter mit Kabeln**, passend auch für die Länge des konkreten Akkus. | Vorhanden |
 | Passiver Piezo-Buzzer | Für einen Funktionstest in der Firmware an GPIO25 (LEDC/PWM) vorgesehen. Konkreten Signalgeber und zulässige Ansteuerung vor dem Anschluss prüfen. |
 
 ## Noch zu beschaffen oder festzulegen
 
 | Menge | Bauteil / Mindestanforderung | Anbieter / Status |
-|---:|---|---|
+| ---: | --- | --- |
 | 1 | **Lade- und Power-Path-Modul für eine Li-Ion-Zelle:** 4,2-V-Ladeprofil, USB-Eingang, Betrieb der Last während des Ladens ohne Beeinträchtigung der Ladeabschaltung, dokumentierter Last-Ausgang. Für den endgültigen Aufbau muss die nachgeschaltete Versorgung eine stabile 3,3-V-Schiene mit mindestens 1 A Dauerstrom und ausreichender Reserve für ESP32-Stromspitzen liefern. | Conrad zuerst prüfen; derzeit kein geeignetes konkretes Modul bestätigt. Kein TP4056-Board ohne dokumentierten Power-Path als Ersatz einplanen. |
 | 1 | **3,3-V-Buck-Boost-Wandler**, falls der Power-Path-Ausgang nicht selbst geregelt 3,3 V liefert: Eingang passend zum Einzellen-Akku-/SYS-Bereich, 3,3 V Ausgang, mindestens 1 A Dauerstrom; geringe Ruhestromaufnahme bevorzugt. | Conrad zuerst prüfen; konkrete Bestellnummer offen. Der vorhandene AMS1117 und ein reiner Abwärtswandler wie MP1584 erfüllen diese Anforderung nicht. |
-| 1 | **1x-18650-Halter mit Kabeln**, passend auch für die Länge des konkreten Akkus. Conrad führt den TRU COMPONENTS TC-13220688 als 1x-18650-Halter mit Kabeln. | [Conrad-Batteriehalter-Sortiment](https://www.conrad.de/de/o/batteriehalter-0501190.html) – Artikel TC-13220688 ist dort auffindbar. |
 | 1 | **USB-Netzteil für den Ladebetrieb**, 5 V, mindestens 2 A, mit passendem Kabel zum gewählten Lade-/Power-Path-Modul. | Conrad; erst nach Auswahl des Moduls bestellen. Ein 5-V/1-A-Eingang kann bei gleichzeitiger Last den Ladestrom begrenzen. |
 | 4 | **Momentane Taster** für Dienstbeginn, Dienstende, Pausenbeginn und Pausenende. Mechanische Bauform, Einbaudurchmesser und Beleuchtung müssen zum Gehäuse passen. | Conrad bevorzugt; Artikel noch offen. Bei integrierter LED deren Spannung und Anschluss vor Kauf prüfen. Alternative: Taster plus je eine separate Anzeige-LED. |
 | 4 | **LED-Anzeigen für die vier Tasten**, falls nicht in den Tastern enthalten; getrennt steuerbar, mit geeigneter Treiberstufe und individuellem Vorwiderstand. | Conrad bevorzugt; konkrete LEDs und Widerstandswerte nach Festlegung der Versorgung und Taster. |

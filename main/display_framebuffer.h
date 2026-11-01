@@ -1,5 +1,8 @@
 #pragma once
 
+#ifdef __cplusplus
+extern "C" {
+#endif
 #include <stddef.h>
 #include <stdint.h>
 
@@ -20,11 +23,14 @@ void epd_fb_draw_pixel(int x, int y, uint8_t color);
 uint8_t epd_fb_get_pixel(int x, int y);
 void epd_fb_draw_rectangle(int x, int y, int width, int height, uint8_t color);
 void epd_fb_fill_rectangle(int x, int y, int width, int height, uint8_t color);
-void epd_fb_draw_string(int x, int y, const char *text,
-                        const sFONT *font, uint8_t color);
+void epd_fb_draw_string(int x, int y, const char *text, const sFONT *font,
+                        uint8_t color);
 void epd_fb_test_pattern(void);
 void epd_fb_test_checkerboard(void);
 
 // Zugriff für den Hardwaretreiber oder einen Host-seitigen Bildexport.
 const uint8_t *epd_fb_data(void);
 size_t epd_fb_size(void);
+#ifdef __cplusplus
+}
+#endif

@@ -1,6 +1,6 @@
 idf_component_register(
     SRCS
-        "main.c"
+        "main.cpp"
         "font8.cpp"
         "font12.cpp"
         "font16.cpp"
@@ -9,10 +9,12 @@ idf_component_register(
         "font48.cpp"
         "wifi_manager.c" 
         "time_manager.c"
+        "http_manager.c"
         "nfc_reader.c"
         "epaper_manager.c"
         "display_framebuffer.c"
         "buzzer.c"
     INCLUDE_DIRS
         "."
+    EMBED_TXTFILES "dev-ca.pem"
 )

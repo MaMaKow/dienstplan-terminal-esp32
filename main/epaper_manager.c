@@ -7,8 +7,9 @@ static const char *TAG = "EPAPER";
 #include "driver/gpio.h"
 #include "driver/spi_master.h"
 #include "esp_log.h"
-#include "freertos/task.h"
+#include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
+#include "freertos/task.h"
 
 // SSD1680-Speichergeometrie für die Controller-Konfiguration.
 #define EPD_RAM_WIDTH 128
@@ -206,12 +207,8 @@ void epd_init(void) {
   // SPI Initialisierung
   spi_bus_config_t buscfg = {
       // MFRC522 teilt CLK/MOSI mit dem E-Paper und benötigt MISO.
-      .miso_io_num = 19,
-      .mosi_io_num = PIN_DIN,
-      .sclk_io_num = PIN_CLK,
-      .quadwp_io_num = -1,
-      .quadhd_io_num = -1,
-      .max_transfer_sz = 4096,
+      .miso_io_num = 19,   .mosi_io_num = PIN_DIN, .sclk_io_num = PIN_CLK,
+      .quadwp_io_num = -1, .quadhd_io_num = -1,    .max_transfer_sz = 4096,
   };
 
   spi_device_interface_config_t devcfg = {

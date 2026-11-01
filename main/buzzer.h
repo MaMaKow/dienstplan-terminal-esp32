@@ -1,4 +1,8 @@
 #pragma once
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 #include "driver/gpio.h"
 #include "esp_err.h"
 #include <stdbool.h>
@@ -21,3 +25,6 @@ void buzzer_update(
     void); // aus Hauptschleife oder eigenem Task periodisch aufrufen
 bool buzzer_is_playing(void); // nützlich: Zustandsautomaten-Entscheidungen (z.
                               // B. Karte gelesen → Auflösung läuft)
+#ifdef __cplusplus
+}
+#endif

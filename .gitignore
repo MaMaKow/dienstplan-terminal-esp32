@@ -12,6 +12,8 @@ tools/mock-server/data/state.json
 tools/mock-server/data/state.json.tmp
 tools/mock-server/data/.credentials.key
 tools/mock-server/data/.security.pepper
-
 tools/mock-server/certs/.san-runtime.*
 .php-cs-fixer.cache
+sdkconfig.old
+main/dev-ca.pem
+main/http_config.h

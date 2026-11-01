@@ -3,6 +3,7 @@ set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 CERT_DIR="$SCRIPT_DIR/certs"
+ESP_DIR="$SCRIPT_DIR/../../main"
 PHP_PORT="${MOCK_PHP_PORT:-8088}"
 TLS_PORT="${MOCK_TLS_PORT:-8443}"
 PHP_BIN="${PHP_BIN:-php}"
@@ -83,9 +84,9 @@ fi
 openssl req -new -key "$server_key" -out "$server_csr" -subj "/CN=$hostname_fqdn"
 # Alle nicht-Loopback-, nicht-Link-Local-IPv4-Adressen einsammeln
 mapfile -t lan_ips < <(
-  ip -o -4 addr show scope global \
-    | awk '{split($4,a,"/"); print a[1]}' \
-    | grep -Ev '^(127\.|169\.254\.)'
+  ip -o -4 addr show scope global |
+    awk '{split($4,a,"/"); print a[1]}' |
+    grep -Ev '^(127\.|169\.254\.)'
 )
 [[ ${#lan_ips[@]} -gt 0 ]] || fail "Keine LAN-IPv4-Adresse gefunden."
 [[ -z "${MOCK_IP:-}" ]] || lan_ips=("$MOCK_IP")
@@ -94,11 +95,14 @@ san_entries=""
 for ip in "${lan_ips[@]}"; do
   san_entries+="IP:$ip,"
 done
-san_entries+="IP:127.0.0.1,DNS:localhost,DNS:$hostname_short"
+san_entries+="IP:127.0.0.1,DNS:localhost,DNS:$hostname_short,DNS:$hostname_short.local"
 printf 'subjectAltName = %s\n' "$san_entries" >"$san_config"
 openssl x509 -req -sha256 -in "$server_csr" -CA "$ca_cert" -CAkey "$ca_key" \
   -CAcreateserial -out "$server_cert" -days 825 -extfile "$san_config"
 chmod 644 "$server_cert" "$ca_cert"
+
+# Copy ca pem to ESP directory
+cp $ca_cert $ESP_DIR/dev-ca.pem
 
 # Keep the user's stunnel settings, but use runtime ports and the generated cert paths.
 # Running stunnel in foreground lets this script cleanly stop it when PHP exits.
@@ -110,6 +114,13 @@ accept = 0.0.0.0:$TLS_PORT
 connect = 127.0.0.1:$PHP_PORT
 cert = $server_cert
 key = $server_key
+EOF
+
+cat >"$ESP_DIR/http_config.h" <<EOF
+#pragma once
+
+#define HTTP_SERVER_HOST "$lan_ip"
+#define HTTP_SERVER_PORT $TLS_PORT
 EOF
 
 printf '\nDienstplan Mock-Server startet\n'

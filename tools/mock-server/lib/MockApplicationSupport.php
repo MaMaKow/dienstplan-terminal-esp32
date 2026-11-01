@@ -3,11 +3,9 @@
 declare(strict_types=1);
 
 /** Shared persistence, authentication, validation, and response helpers. */
-trait MockApplicationSupport
-{
+trait MockApplicationSupport {
     /** Load a fictional initial dataset on the first request. */
-    private function loadState(): array
-    {
+    private function loadState(): array {
         $directory = dirname($this->statePath);
         if (!is_dir($directory)) {
             mkdir($directory, 0770, true);
@@ -63,8 +61,7 @@ trait MockApplicationSupport
     }
 
     /** Persist state after a request changes mock data. */
-    private function save(): void
-    {
+    private function save(): void {
         $temporaryPath = $this->statePath . '.tmp';
         $encodedState = json_encode(
             $this->state,
@@ -74,25 +71,21 @@ trait MockApplicationSupport
         rename($temporaryPath, $this->statePath);
     }
 
-    private function now(): string
-    {
+    private function now(): string {
         return gmdate('Y-m-d\TH:i:s\Z');
     }
 
-    private function id(string $prefix): string
-    {
+    private function id(string $prefix): string {
         return $prefix . '_' . strtoupper(bin2hex(random_bytes(8)));
     }
 
-    private function header(string $name): string
-    {
+    private function header(string $name): string {
         $serverKey = 'HTTP_' . strtoupper(str_replace('-', '_', $name));
         return $_SERVER[$serverKey] ?? '';
     }
 
     /** Read the ordinary bearer scheme and support deliberate mock error tokens. */
-    private function bearer(): string
-    {
+    private function bearer(): string {
         $authorization = $this->header('Authorization');
         if (!preg_match('/^Bearer\s+(.+)$/i', $authorization, $matches)) {
             $this->fail('DEVICE_UNAUTHORIZED', 401);
@@ -107,16 +100,14 @@ trait MockApplicationSupport
         return $matches[1];
     }
 
-    private function admin(): void
-    {
+    private function admin(): void {
         $token = $this->bearer();
         if (!in_array($token, ['admin-token', 'provisioning-admin-token'], true)) {
             $this->fail('DEVICE_UNAUTHORIZED', 401);
         }
     }
 
-    private function appUser(string $branchId): void
-    {
+    private function appUser(string $branchId): void {
         $token = $this->bearer();
         if (!in_array($token, ['user-token', 'app-user-token'], true)) {
             $this->fail('DEVICE_UNAUTHORIZED', 401);
@@ -127,8 +118,7 @@ trait MockApplicationSupport
     }
 
     /** Resolve an issued access token to its active device. */
-    private function device(): array
-    {
+    private function device(): array {
         $token = $this->bearer();
         $tokenHash = hash('sha256', $token);
         $tokenRecord = $this->state['access_tokens'][$tokenHash] ?? null;
@@ -145,8 +135,7 @@ trait MockApplicationSupport
     }
 
     /** Validate the Claim authorization scheme for registration polling/ack. */
-    private function claim(string $registrationId): array
-    {
+    private function claim(string $registrationId): array {
         $authorization = $this->header('Authorization');
         if (!preg_match('/^Claim\s+(.+)$/i', $authorization, $matches)) {
             $this->fail('DEVICE_UNAUTHORIZED', 401);
@@ -167,11 +156,13 @@ trait MockApplicationSupport
         return $registration;
     }
 
-    private function json(array $data, int $status = 200): never
-    {
+    private function json(array $data, int $status = 200): never {
         http_response_code($status);
         header('Content-Type: application/json; charset=utf-8');
-        echo json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $payload = json_encode($data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        header('Content-Length: ' . strlen($payload));
+        header('Connection: close');
+        echo $payload;
         exit;
     }
 
@@ -223,8 +214,7 @@ trait MockApplicationSupport
     }
 
     /** Generate stable local secrets unless the operator supplies them through the environment. */
-    private function localSecret(string $environmentName, string $filename): string
-    {
+    private function localSecret(string $environmentName, string $filename): string {
         $configuredSecret = getenv($environmentName);
         if ($configuredSecret !== false && $configuredSecret !== '') {
             return $configuredSecret;
@@ -239,19 +229,16 @@ trait MockApplicationSupport
         return trim((string) file_get_contents($secretPath));
     }
 
-    private function encryptionKey(): string
-    {
+    private function encryptionKey(): string {
         return hash('sha256', $this->localSecret('MOCK_CREDENTIALS_KEY', 'credentials.key'), true);
     }
 
-    private function securityPepper(): string
-    {
+    private function securityPepper(): string {
         return $this->localSecret('MOCK_SECURITY_PEPPER', 'security.pepper');
     }
 
     /** Encrypt one-time credentials while they wait for the device's acknowledgement. */
-    private function encryptSecret(string $secret): string
-    {
+    private function encryptSecret(string $secret): string {
         $nonce = random_bytes(12);
         $tag = '';
         $ciphertext = openssl_encrypt(
@@ -269,8 +256,7 @@ trait MockApplicationSupport
         return base64_encode($nonce . $tag . $ciphertext);
     }
 
-    private function decryptSecret(string $encodedSecret): string
-    {
+    private function decryptSecret(string $encodedSecret): string {
         $payload = base64_decode($encodedSecret, true);
         if ($payload === false || strlen($payload) < 28) {
             $this->fail('SERVER_ERROR', 500);
@@ -291,8 +277,7 @@ trait MockApplicationSupport
         return $plaintext;
     }
 
-    private function required(string ...$fields): void
-    {
+    private function required(string ...$fields): void {
         foreach ($fields as $field) {
             if (!isset($this->body[$field]) || $this->body[$field] === '') {
                 $this->fail('VALIDATION_ERROR', 400);
@@ -300,13 +285,11 @@ trait MockApplicationSupport
         }
     }
 
-    private function validUid(string $uid): bool
-    {
+    private function validUid(string $uid): bool {
         return (bool) preg_match('/^[0-9A-Fa-f]{8,20}$/', $uid) && strlen($uid) % 2 === 0;
     }
 
-    private function actions(string $state): array
-    {
+    private function actions(string $state): array {
         $actionsByState = [
             'off_duty' => ['shift_start'],
             'on_shift' => ['shift_end', 'break_start'],
@@ -316,8 +299,7 @@ trait MockApplicationSupport
         return $actionsByState[$state] ?? [];
     }
 
-    private function stateForRequest(): string
-    {
+    private function stateForRequest(): string {
         $uid = strtoupper((string) ($this->body['card_uid'] ?? ''));
         return $this->state['cards'][$uid]['state'] ?? 'off_duty';
     }

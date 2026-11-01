@@ -146,7 +146,7 @@ Startet eine ausstehende Registrierung. Authentifizierung: keine; ausschließlic
 
 ```json
 {
-  "device_name": "Dienstplan-Terminal-2026-10-21-08-15",
+	  "device_name": "Dienstplan-Terminal-2026-10-21-08-15",
   "security_code": "482731"
 }
 ```

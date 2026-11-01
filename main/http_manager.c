@@ -55,10 +55,10 @@ static void http_task(void *arg) {
     esp_http_client_set_url(s_client, req.path);
     esp_http_client_set_method(s_client, req.method);
     if (req.post_body[0] != '\0') {
-      // esp_http_client_set_header(s_client, "Content-Type",
-      // "application/json");
-      esp_http_client_set_header(s_client, "Content-Type",
-                                 "application/x-www-form-urlencoded");
+      const char *content_type = req.content_type[0] != '\0'
+                                     ? req.content_type
+                                     : "application/json";
+      esp_http_client_set_header(s_client, "Content-Type", content_type);
       esp_http_client_set_post_field(s_client, req.post_body,
                                      strlen(req.post_body));
     } else {

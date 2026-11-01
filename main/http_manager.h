@@ -11,6 +11,7 @@ extern "C" {
 #include "freertos/FreeRTOS.h"
 
 #define HTTP_PATH_MAX 128
+#define HTTP_CONTENT_TYPE_MAX 48
 #define HTTP_BODY_MAX 256
 #define HTTP_RESP_MAX 2048
 
@@ -30,9 +31,10 @@ typedef void (*http_callback_t)(const http_response_t *resp, void *ctx);
 typedef struct {
   char path[HTTP_PATH_MAX]; // z.B. "/v1/device-auth/token/"
   esp_http_client_method_t method;
-  char post_body[HTTP_BODY_MAX]; // leer = kein Body
-  http_callback_t cb;            // darf NULL sein
-  void *cb_ctx;                  // muss die Lebensdauer des Requests überdauern
+  char content_type[HTTP_CONTENT_TYPE_MAX]; // z.B. application/json
+  char post_body[HTTP_BODY_MAX];            // leer = kein Body
+  http_callback_t cb;                       // darf NULL sein
+  void *cb_ctx; // muss die Lebensdauer des Requests überdauern
 } http_request_t;
 
 /* Queue + HTTP-Client + Task anlegen. Einmal aufrufen (nach nvs/wifi_init). */

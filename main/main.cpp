@@ -29,13 +29,17 @@ static void buzzer_task(void *pvParameters) {
     vTaskDelay(delay > 0 ? delay : 1);
   }
 }
-static void on_token(const http_response_t *r, void *ctx) {
+static void on_registration(const http_response_t *r, void *ctx) {
+  (void)ctx;
 
-  if (r->err == ESP_OK && r->status == 200) {
-    ESP_LOGI(TAG, "Got status 200 in response");
-    ESP_LOGI(TAG, "Status: %d", r->status);
-    ESP_LOGI(TAG, "Body Length: %d", r->body_len);
-    ESP_LOGI(TAG, "Body: %s", r->body);
+  if (r->err != ESP_OK) {
+    ESP_LOGE(TAG, "Geräteregistrierung fehlgeschlagen: %s",
+             esp_err_to_name(r->err));
+  } else if (r->status == 201) {
+    // Die Antwort enthält ein Claim-Token und darf nicht protokolliert werden.
+    ESP_LOGI(TAG, "Geräteregistrierung angelegt; Freigabe steht aus");
+  } else {
+    ESP_LOGE(TAG, "Geräteregistrierung abgelehnt: HTTP %d", r->status);
   }
 }
 
@@ -65,24 +69,22 @@ static void button_task(void *pvParameters) {
                    localtime(&now));
 
           // Zufallscode direkt in die Formatierung einbauen
-          const char charset[] = "abcdefghijklmnopqrstuvwxyz";
-          char security_code[9]; // 4 Buchstaben + 4 Ziffern + Nullterminator
-          for (int i = 0; i < 4; i++) {
-            security_code[i] = charset[esp_random() % (sizeof(charset) - 1)];
-          }
-          for (int i = 4; i < 8; i++) {
+          char security_code[7]; // sechs Ziffern plus Nullterminator
+          for (int i = 0; i < 6; i++) {
             security_code[i] = '0' + (esp_random() % 10);
           }
-          security_code[8] = '\0'; // Wichtig: String terminieren
+          security_code[6] = '\0';
 
           // Request-Struktur initialisieren
           http_request_t request = {
               .path = "/v1/device-registrations",
               .method = HTTP_METHOD_POST,
-              .cb = on_token,
+              .content_type = "application/json",
+              .cb = on_registration,
           };
           snprintf(request.post_body, sizeof(request.post_body),
-                   "device_name=Dienstplan-Terminal-%s&security_code=%s",
+                   "{\"device_name\":\"Dienstplan-Terminal-%s\","
+                   "\"security_code\":\"%s\"}",
                    time_buf, security_code);
 
           esp_err_t err = http_manager_enqueue(&request, pdMS_TO_TICKS(5000));

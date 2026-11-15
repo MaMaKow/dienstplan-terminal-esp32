@@ -1,8 +1,17 @@
 #include "app_state_machine.h"
 #include "esp_err.h"
+#include <stdbool.h>
 
 static app_state_t current_state = APP_STATE_STARTUP;
-esp_err_t app_state_machine_start(void) { current_state = APP_STATE_STARTUP; }
+esp_err_t app_state_machine_start(void) {
+  //@TODO: Hier muss noch unterschieden werden, ob die Provisionierung bereits
+  // abgecshlossen wurde. current_state = credentials_is_provisioned()
+  //                  ? APP_STATE_WLAN_VERBINDEN
+  //                  : APP_STATE_IDLE;
+  current_state = APP_STATE_STARTUP;
+  return ESP_OK;
+}
+
 esp_err_t app_state_machine_post_event(const app_event_t *event) {
   if (event == NULL) {
     return ESP_ERR_INVALID_ARG;
@@ -85,3 +94,8 @@ esp_err_t app_state_machine_post_event(const app_event_t *event) {
   return ESP_ERR_INVALID_STATE;
 }
 app_state_t app_state_machine_get_state(void) { return current_state; }
+
+bool app_state_machine_is_setup_phase(void) {
+  return current_state == APP_STATE_STARTUP ||
+         current_state == APP_STATE_SOFTAP_EINRICHTUNG;
+}

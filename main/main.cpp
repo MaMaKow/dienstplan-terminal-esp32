@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include <time.h>
 
+#include "app_state_machine.h"
 #include "buzzer.h"
 #include "epaper_manager.h"
 #include "http_manager.h"
@@ -151,7 +152,9 @@ extern "C" void app_main(void) {
       .intr_type = GPIO_INTR_DISABLE,
   };
   ESP_ERROR_CHECK(gpio_config(&io_conf));
+  app_state_machine_start(); // muss vor wifi_init() laufen
   wifi_init();
+
   ESP_ERROR_CHECK(http_manager_start());
   // etwas warten bis WLAN steht
   vTaskDelay(pdMS_TO_TICKS(5000));

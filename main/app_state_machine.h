@@ -46,6 +46,8 @@ esp_err_t app_state_machine_start(void);
 esp_err_t app_state_machine_post_event(const app_event_t *event);
 app_state_t app_state_machine_get_state(void);
 
+bool app_state_machine_is_setup_phase(void);
+
 #ifdef __cplusplus
 }
 #endif
